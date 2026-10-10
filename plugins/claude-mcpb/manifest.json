@@ -1,0 +1,30 @@
+{
+  "manifest_version": "0.3",
+  "name": "remotecontrol-lan",
+  "version": "1.8.10",
+  "display_name": "RemoteControl LAN",
+  "description": "Remote ID/PW로 인터넷 없는 LAN PC의 프로그램을 진단하고 파일을 배포합니다.",
+  "author": { "name": "ontech" },
+  "server": {
+    "type": "binary",
+    "entry_point": "server/RemoteControl.exe",
+    "mcp_config": {
+      "command": "${__dirname}/server/RemoteControl.exe",
+      "args": ["--mcp-client"],
+      "env": {
+        "RC_MCP_HOST": "${user_config.host}",
+        "RC_MCP_PORT": "${user_config.port}",
+        "RC_MCP_USER": "${user_config.user}",
+        "RC_MCP_PASSWORD": "${user_config.password}"
+      }
+    }
+  },
+  "compatibility": { "platforms": ["win32"] },
+  "tools_generated": true,
+  "user_config": {
+    "host": { "type": "string", "title": "대상 PC IPv4", "description": "LLM PC에서 접근할 수 있는 원격 PC의 LAN IP", "required": true },
+    "port": { "type": "string", "title": "MCP 포트", "description": "대상 RemoteControl MCP 설정의 포트", "default": "5901", "required": true },
+    "user": { "type": "string", "title": "Remote ID", "description": "원격제어에 설정한 로그인 ID", "default": "admin", "required": true },
+    "password": { "type": "string", "title": "Remote PW", "description": "원격제어 로그인 비밀번호. 외부 인증 토큰이 아닙니다.", "sensitive": true, "required": true }
+  }
+}

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>원격제어 로그인</title>
+
+<!-- 앱으로 설치하면 여기가 첫 화면이 된다. 뷰어에만 달아 두면 홈 화면에서
+     열었을 때 아이콘도 이름도 없는 맨 브라우저 창이 뜬다. -->
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#0b0f18">
+<link rel="icon" href="/icon-192.png">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="원격제어">
+<style>
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+         background:#0b0f18; color:#e2e8f0; padding:24px;
+         font-family:'맑은 고딕','Malgun Gothic',system-ui,sans-serif; }
+  .card { width:100%; max-width:360px; background:rgba(22,30,49,.95);
+          border:1px solid rgba(255,255,255,.1); border-radius:18px;
+          padding:32px 26px; box-shadow:0 10px 40px rgba(0,0,0,.5); }
+  .icon { font-size:44px; text-align:center; margin-bottom:10px; }
+  h1 { font-size:19px; text-align:center; margin:0 0 4px; }
+  .sub { font-size:12px; color:#94a3b8; text-align:center; margin-bottom:22px; }
+  label { display:block; font-size:12px; color:#94a3b8; margin:14px 0 6px; }
+  input { width:100%; padding:12px; border-radius:10px; font-size:15px;
+          border:1px solid rgba(255,255,255,.18); background:#0f172a; color:#fff; }
+  input:focus { outline:none; border-color:#22d3ee; }
+  button { width:100%; margin-top:22px; padding:13px 0; border:none; border-radius:10px;
+           background:linear-gradient(135deg,#6366f1,#8b5cf6); color:#fff;
+           font-size:15px; font-weight:bold; cursor:pointer; }
+  button:disabled { opacity:.55; cursor:default; }
+  .err { margin-top:14px; padding:10px 12px; border-radius:9px; font-size:13px; line-height:1.6;
+         background:rgba(248,113,113,.12); border:1px solid rgba(248,113,113,.35); color:#fca5a5; }
+  .note { margin-top:18px; font-size:11px; color:#64748b; line-height:1.7; text-align:center; }
+</style>
+</head>
+<body>
+<form class="card" method="POST" action="/login" autocomplete="off">
+  <div class="icon">🖥️</div>
+  <h1>원격제어</h1>
+  <div class="sub">%HOST%</div>
+
+  <label for="u">아이디</label>
+  <input id="u" name="u" autocapitalize="off" autocorrect="off" spellcheck="false" autofocus required>
+
+  <label for="p">비밀번호</label>
+  <input id="p" name="p" type="password" required>
+
+  <button type="submit">접속</button>
+
+  %ERROR%
+
+  <div class="note">이 PC 를 원격으로 조작합니다.<br>접속하면 대상 PC 화면에 표시됩니다.</div>
+</form>
+</body>
+</html>

@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "remotecontrol-lan": {
+      "type": "stdio",
+      "command": "${PLUGIN_ROOT}/server/RemoteControl.exe",
+      "args": ["--mcp-client", "--profile", "default"]
+    }
+  }
+}

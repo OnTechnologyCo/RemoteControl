@@ -1,0 +1,16 @@
+title = "RemoteControl source secret checks"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "remotecontrol-telegram-bot-token"
+description = "Telegram bot token literals must not be committed"
+regex = '''\b[0-9]{6,12}:[A-Za-z0-9_-]{25,}\b'''
+
+[[allowlists]]
+description = "Fixed public 16-byte WebSocket nonce in two isolated test files"
+condition = "AND"
+paths = ['''(^|/)bench/(SshTunnelTest|StreamServerTest)\.cs$''']
+regexTarget = "secret"
+regexes = ['''^MDEyMzQ1Njc4OWFiY2RlZg={0,2}$''', '''^0123456789abcdef$''']

@@ -1,0 +1,61 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!--
+  원격제어용 가상 모니터 설정.
+
+  드라이버는 이 파일을 C:\VirtualDisplayDriver\vdd_settings.xml 에서 읽는다.
+  설치할 때 그 자리에 복사한다.
+
+  원본에 있던 2560x1440, 3840x2160 은 뺐다.
+  원격으로 보는 화면이라 그만큼 커 봐야 회선만 먹고 휴대폰에서는 보이지도 않는다.
+  맨 앞에 둔 1920x1080 이 기본으로 잡힌다.
+
+  주사율도 60 하나만 둔다. 화면이 바뀔 때만 보내는 구조라 높은 주사율이 의미가 없고,
+  목록만 길어져 고르기 번거롭다.
+-->
+<vdd_settings>
+    <monitors>
+        <count>1</count>
+    </monitors>
+
+    <gpu>
+        <friendlyname>default</friendlyname>
+    </gpu>
+
+    <global>
+        <g_refresh_rate>60</g_refresh_rate>
+    </global>
+
+    <resolutions>
+        <resolution>
+            <width>1920</width>
+            <height>1080</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <resolution>
+            <width>1600</width>
+            <height>900</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <resolution>
+            <width>1366</width>
+            <height>768</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <resolution>
+            <width>1280</width>
+            <height>720</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+    </resolutions>
+
+    <options>
+        <CustomEdid>false</CustomEdid>
+        <PreventSpoof>false</PreventSpoof>
+        <EdidCeaOverride>false</EdidCeaOverride>
+        <HardwareCursor>true</HardwareCursor>
+        <SDR10bit>false</SDR10bit>
+        <HDRPlus>false</HDRPlus>
+        <logging>false</logging>
+        <debuglogging>false</debuglogging>
+    </options>
+</vdd_settings>

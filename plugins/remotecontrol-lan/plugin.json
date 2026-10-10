@@ -1,0 +1,7 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "remotecontrol-lan",
+  "version": "1.8.10",
+  "description": "Inspect and deploy programs on offline LAN PCs using RemoteControl login.",
+  "author": { "name": "ontech" }
+}

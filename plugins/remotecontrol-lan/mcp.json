@@ -1,0 +1,10 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "remotecontrol-lan": {
+      "type": "stdio",
+      "command": "${PLUGIN_ROOT}/server/RemoteControl.exe",
+      "args": ["--mcp-client", "--profile", "default"]
+    }
+  }
+}
