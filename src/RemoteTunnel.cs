@@ -6,9 +6,9 @@ namespace RemoteControl
     internal static class RemoteTunnel
     {
         internal static readonly string[] SettingKeys = {
-            "tunnel", "sshhost", "sshport", "sshuser", "sshkeyfile", "sshknownhosts",
-            "sshremoteport", "sshurl", "tunnelrevision", "tskey", "tskeym", "tsreset", "extauto", "port",
-            "mcp_web_mode", "mcp_ts_port", "mcp_ts_gateway", "mcp_ts_revision", "mcp_enabled", "mcp_port"
+            "tunnel", "sshhost", "sshport", "sshuser", "sshaccesskey", "sshaccesskeym",
+            "sshfingerprint", "sshname", "tunnelrevision", "tskey", "tskeym", "tsreset", "extauto", "port",
+            "mcp_private_gateway", "mcp_private_revision", "mcp_web_mode", "mcp_ts_port", "mcp_ts_gateway", "mcp_ts_revision", "mcp_enabled", "mcp_port"
         };
         private static readonly object startGate = new object();
         private static readonly object stateGate = new object();
@@ -27,7 +27,7 @@ namespace RemoteControl
                 return p;
             }
         }
-        internal static string Name { get { return Provider == "private" ? "private-tunnel (SSH)" : Provider == "tailscale" ? "Tailscale" : "사용 안 함"; } }
+        internal static string Name { get { return Provider == "private" ? "프라이빗 터널 (SSHTunnel)" : Provider == "tailscale" ? "Tailscale" : "사용 안 함"; } }
         internal static bool IsOpening { get { return Tunnel.IsOpening || SshTunnel.IsOpening; } }
         internal static bool IsAlive() { return active == "private" ? SshTunnel.IsAlive() : active == "tailscale" && Tunnel.IsAlive(); }
         internal static string CurrentUrl { get { return active == "private" ? SshTunnel.CurrentUrl : active == "tailscale" ? Tunnel.CurrentUrl : ""; } }
@@ -49,8 +49,9 @@ namespace RemoteControl
         {
             string[] values=Config.GetMany(SettingKeys);
             // 직접 입력 MCP와 SSH는 Tailscale MCP 설정 변경의 영향을 받지 않는다.
-            if(Provider!="tailscale"||Config.Get("mcp_web_mode")!="tailscale")
+            if((Provider!="tailscale"&&Provider!="private")||Config.Get("mcp_web_mode")!=Provider)
                 for(int i=0;i<SettingKeys.Length;i++)if(SettingKeys[i].StartsWith("mcp_",StringComparison.Ordinal))values[i]="";
+            for(int i=0;i<SettingKeys.Length;i++)if((Provider=="private"&&SettingKeys[i].StartsWith("mcp_ts_"))||(Provider=="tailscale"&&SettingKeys[i].StartsWith("mcp_private_")))values[i]="";
             return string.Join("\n",values);
         }
 
@@ -105,6 +106,7 @@ namespace RemoteControl
             {
                 generation++;
                 TailscaleMcp.Stop();
+                PrivateMcp.Stop();
                 Tunnel.Stop();
                 SshTunnel.Stop();
             }

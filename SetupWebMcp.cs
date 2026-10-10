@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -38,7 +38,7 @@ namespace RemoteControlSetup
         }
         internal static int PreferredPort()
         {
-            string key=ReadSetting("mcp_web_mode","")=="tailscale"?"mcp_ddns_url":"mcp_web_url";
+            string key=(ReadSetting("mcp_web_mode","")=="tailscale"||ReadSetting("mcp_web_mode","")=="private")?"mcp_ddns_url":"mcp_web_url";
             Uri uri; return Uri.TryCreate(ReadSetting(key, DefaultUrl), UriKind.Absolute, out uri) && IsHttpsPort(uri.Port) ? uri.Port : DefaultPort;
         }
         internal static bool IsHttpsPort(int port) { return port==443 || (port>=1024 && port<=65535); }
@@ -52,9 +52,9 @@ namespace RemoteControlSetup
             if (!o.WebMcp) return;
             if (!o.LockScreen) throw new ArgumentException("웹 연결 자동 실행에는 잠금 화면 제어 서비스가 필요합니다.");
             if (ReadSetting("pwhash", "").Length == 0) throw new ArgumentException("먼저 웹 연결을 선택하지 않고 설치하세요. 원격제어에서 ID와 비밀번호를 설정한 뒤 [LLM / MCP 설정] → [웹 ChatGPT / Claude 설정]에서 연결할 수 있습니다.");
-            if(o.WebTailscale) {
+            if(o.WebTailscale || o.WebPrivate) {
                 if(LanPort()<1024)throw new ArgumentException("웹 MCP에 사용할 LAN MCP 포트는 1024 이상으로 지정하세요.");
-                if(o.WebPublicPort!=443 && o.WebPublicPort!=8443 && o.WebPublicPort!=10000)throw new ArgumentException("Tailscale MCP 공개 포트는 기본 443 또는 8443, 10000을 선택하세요.");
+                if(!o.WebPrivate && o.WebPublicPort!=443 && o.WebPublicPort!=8443 && o.WebPublicPort!=10000)throw new ArgumentException("Tailscale MCP 공개 포트는 기본 443 또는 8443, 10000을 선택하세요.");
                 if(o.WebGatewayPort<1024||o.WebGatewayPort>65535||o.WebGatewayPort==LanPort()||o.WebGatewayPort==o.Port||o.Port==LanPort())throw new ArgumentException("로컬 중계 포트는 화면 및 LAN MCP 포트와 다르게 지정하세요.");
                 return;
             }
@@ -117,7 +117,7 @@ namespace RemoteControlSetup
             {
                 Entry(zip, "plugin.json", json.Serialize(manifest));
                 Entry(zip, "mcp.json", json.Serialize(mcp));
-                Entry(zip, "skills/remotecontrol-web/SKILL.md", "---\nname: remotecontrol-web\ndescription: Inspect and manage the connected RemoteControl PC over HTTPS MCP.\n---\nCall pc_get_status first and verify the target hostname before changes. File paths are on that PC. Commands run with the remote agent Windows rights. Keep output concise. Never retry an execution after an uncertain transport failure. Reconnect through OAuth when authentication expires. Web connections do not provide local pc_upload_file or pc_download_file bridge tools.\n");
+                Entry(zip, "skills/remotecontrol-web/SKILL.md", "---\nname: remotecontrol-web\ndescription: Inspect and manage the connected RemoteControl PC over HTTPS MCP.\n---\nCall pc_get_status first and verify the target hostname before changes. File paths are on that PC. Commands run with the remote agent Windows rights. Keep output concise. Never retry an execution after an uncertain transport failure. Reconnect through OAuth when authentication expires. Use pc_open_file_transfer for the authenticated browser file/folder picker and streaming downloads. Direct MCP binary transfers use pc_begin_upload, pc_write_upload_chunk, pc_finish_upload, pc_prepare_download and pc_read_download_chunk with SHA-256. Local and external clients use the same HTTPS /mcp address; no local connector installation is required.\n");
                 Entry(zip, "README.md", "# RemoteControl Web\n\nMCP URL: " + origin + "/mcp\n\nSetup에서 웹 연결을 켜고 TCP " + new Uri(origin).Port + "과 공개 HTTPS 인증서가 정상인지 확인하세요. 연결 화면에서 원격제어 ID/비밀번호로 로그인합니다. 이 ZIP을 생성한 것만으로 외부 개통이 확인된 것은 아닙니다.\n");
             }
         }
@@ -128,6 +128,13 @@ namespace RemoteControlSetup
         }
         internal static void Activate(Options o, Installer.Say say)
         {
+            if(o.WebPrivate){
+                RunScript(Path.Combine(o.Dir,"web-mcp","Install-PrivateMcp.ps1"),PrivateArguments(o),say);
+                SaveWebMode(o);
+                say("프라이빗 터널의 발급 HTTPS 주소에 /mcp를 자동 연결합니다. 외부망 연결 설정에서 프라이빗 터널을 켜세요.");
+                say("재연결로 주소가 바뀌면 새 MCP 주소를 앱에 등록하고 로그인하세요.");
+                return;
+            }
             if(o.WebTailscale){
                 RunScript(Path.Combine(o.Dir,"web-mcp","Install-TailscaleMcp.ps1"),TailscaleArguments(o),say);
                 SaveWebMode(o);
@@ -144,17 +151,17 @@ namespace RemoteControlSetup
         }
         internal static void Preflight(Options o, Installer.Say say)
         {
-            if (o.WebMcp) RunScript(Path.Combine(o.Dir,"web-mcp",o.WebTailscale?"Install-TailscaleMcp.ps1":"Install-WebMcp.ps1"), (o.WebTailscale?TailscaleArguments(o):Arguments(o)) + " -CheckOnly", say);
+            if (o.WebMcp) RunScript(Path.Combine(o.Dir,"web-mcp",o.WebPrivate?"Install-PrivateMcp.ps1":o.WebTailscale?"Install-TailscaleMcp.ps1":"Install-WebMcp.ps1"), (o.WebPrivate?PrivateArguments(o):o.WebTailscale?TailscaleArguments(o):Arguments(o)) + " -CheckOnly", say);
         }
         internal static void ConfigureExisting(Options o, Installer.Say say)
         {
             Validate(o);
             if (!o.WebMcp) throw new ArgumentException("웹 연결 설정을 선택하세요.");
             if (!Installer.ServiceRunning()) throw new ArgumentException("원격제어에서 잠금 화면 제어 서비스를 먼저 켜세요.");
-            if (!o.WebTailscale && ReadSetting("mcp_enabled", "0") != "1") throw new ArgumentException("[LLM / MCP 설정]에서 LAN MCP 사용을 켜고 저장한 뒤 다시 적용하세요.");
+            if (!o.WebTailscale && !o.WebPrivate && ReadSetting("mcp_enabled", "0") != "1") throw new ArgumentException("[LLM / MCP 설정]에서 LAN MCP 사용을 켜고 저장한 뒤 다시 적용하세요.");
             Preflight(o, say);
             Activate(o, say);
-            if(o.WebTailscale)return;
+            if(o.WebTailscale || o.WebPrivate)return;
             WritePlugin(Path.Combine(o.Dir, "plugins", PluginName), o.WebUrl);
             SaveConfiguredUrl(Installer.SettingsPath, o.WebUrl);
             say("웹 연결 설정을 저장했습니다. 플러그인은 설치 폴더의 plugins에 있습니다.");
@@ -166,14 +173,28 @@ namespace RemoteControlSetup
         }
         private static void SaveWebMode(Options o)
         {
-            var changes=new Dictionary<string,string>{{"mcp_web_mode",o.WebTailscale?"tailscale":"ddns"}};
-            if(o.WebTailscale){
+            var changes=new Dictionary<string,string>{{"mcp_web_mode",o.WebPrivate?"private":o.WebTailscale?"tailscale":"ddns"}};
+            if(o.WebTailscale || o.WebPrivate){
                 changes["mcp_enabled"]="1";
-                changes["mcp_ts_port"]=o.WebPublicPort.ToString();changes["mcp_ts_gateway"]=o.WebGatewayPort.ToString();changes["mcp_ts_revision"]=Guid.NewGuid().ToString("N");
+                if(o.WebPrivate){changes["mcp_private_gateway"]=o.WebGatewayPort.ToString();changes["mcp_private_revision"]=Guid.NewGuid().ToString("N");}
+                else{changes["mcp_ts_port"]=o.WebPublicPort.ToString();changes["mcp_ts_gateway"]=o.WebGatewayPort.ToString();changes["mcp_ts_revision"]=Guid.NewGuid().ToString("N");}
                 string prior=ReadSetting("mcp_web_url","");Uri u;
-                if(ReadSetting("mcp_web_mode","")!="tailscale"&&Uri.TryCreate(prior,UriKind.Absolute,out u))changes["mcp_ddns_url"]=prior;
+                changes["mcp_web_url"]="";
+                if(ReadSetting("mcp_web_mode","")!="tailscale"&&ReadSetting("mcp_web_mode","")!="private"&&Uri.TryCreate(prior,UriKind.Absolute,out u))changes["mcp_ddns_url"]=prior;
             } else {changes["mcp_ddns_url"]=NormalizeUrl(o.WebUrl);changes["mcp_web_url"]=NormalizeUrl(o.WebUrl);}
             SaveSettings(Installer.SettingsPath,changes);
+        }
+        private static string PrivateArguments(Options o){return " -GatewayPort "+o.WebGatewayPort+" -LanPort "+LanPort();}
+        internal static string ReadPrivateUrl()
+        {
+            try{
+                string path=Path.Combine(Path.GetDirectoryName(Installer.SettingsPath),"status.txt");
+                if(DateTime.UtcNow-File.GetLastWriteTimeUtc(path)>TimeSpan.FromSeconds(10)||ReadSetting("tunnel","")!="private")return "";
+                foreach(string line in File.ReadAllLines(path,Encoding.UTF8))if(line.StartsWith("url=")){
+                    string value=line.Substring(4);Uri u;
+                    if(System.Text.RegularExpressions.Regex.IsMatch(value,@"\Ahttps://[a-zA-Z0-9.-]+/?\z")&&Uri.TryCreate(value,UriKind.Absolute,out u)&&u.HostNameType==UriHostNameType.Dns)return u.GetLeftPart(UriPartial.Authority);
+                }
+            }catch{}return "";
         }
         private static string TailscaleArguments(Options o){return " -PublicPort "+o.WebPublicPort+" -GatewayPort "+o.WebGatewayPort+" -LanPort "+LanPort();}
         internal static string ReadTailscaleUrl()
@@ -215,6 +236,8 @@ namespace RemoteControlSetup
         }
         internal static void Disable(Installer.Say say)
         {
+            string privateScript=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),"RemoteControlPrivateMcp","Disable-PrivateMcp.ps1");
+            if(File.Exists(privateScript))RunScript(privateScript,"",say);
             string tailscale=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),"RemoteControlTailscaleMcp","Disable-TailscaleMcp.ps1");
             if(File.Exists(tailscale))RunScript(tailscale,"",say);
             string script = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "RemoteControlWebMcp", "Disable-WebMcp.ps1");

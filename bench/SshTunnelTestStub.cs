@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 namespace RemoteControl
 {
+    internal static class PrivateMcp {internal static void Stop(){} internal static string RequestFields(){return "";} internal static void Address(string value){}}
     internal static class TailscaleMcp {internal static void Stop() {}}
     internal static class Config
     {

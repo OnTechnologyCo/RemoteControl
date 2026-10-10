@@ -76,7 +76,7 @@ func TestSharedDefaultHTTPS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{"/mcp", "/authorize", "/connect", "/token", "/register", "/revoke", "/.well-known/oauth-authorization-server", "/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp"} {
+	for _, path := range []string{"/files", "/files/open", "/files/api", "/files/client.js", "/files/download", "/mcp", "/authorize", "/connect", "/token", "/register", "/revoke", "/.well-known/oauth-authorization-server", "/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp"} {
 		for _, authority := range []string{"pc.test.ts.net", "pc.test.ts.net:443"} {
 			r := httptest.NewRequest("POST", "https://"+authority+path+"?fixture=1", strings.NewReader("{}"))
 			w := httptest.NewRecorder()

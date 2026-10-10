@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 namespace RemoteControl
 {
@@ -21,9 +21,9 @@ namespace RemoteControl
         {
             Config.Reload();var state=Agent.ReadStatus();
             string screen=state!=null?state.Url:RemoteTunnel.CurrentUrl;
-            string mcp=state!=null?state.McpWebUrl:TailscaleMcp.CurrentUrl;
-            bool verified=state!=null?state.McpWebReady:TailscaleMcp.Ready;
-            if(Config.Get("mcp_web_mode")!="tailscale"){mcp=Config.Get("mcp_web_url");verified=false;}
+            string mcp=state!=null?state.McpWebUrl:(Config.Get("mcp_web_mode")=="private"?PrivateMcp.CurrentUrl:TailscaleMcp.CurrentUrl);
+            bool verified=state!=null?state.McpWebReady:(Config.Get("mcp_web_mode")=="private"?PrivateMcp.Ready:TailscaleMcp.Ready);
+            if(Config.Get("mcp_web_mode")!="tailscale"&&Config.Get("mcp_web_mode")!="private"){mcp=Config.Get("mcp_web_url");verified=false;}
             return ConnectionAddresses(screen,mcp,verified);
         }
 

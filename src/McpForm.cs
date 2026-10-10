@@ -22,22 +22,22 @@ namespace RemoteControl
             readStatus=getStatus;Text="LLM / MCP 설정 · 이 PC에서 작업 허용";ClientSize=new Size(620,570);
             Font=new Font("맑은 고딕",9);StartPosition=FormStartPosition.CenterParent;FormBorderStyle=FormBorderStyle.FixedDialog;MaximizeBox=false;MinimizeBox=false;
             Config.Reload();McpOptions o;try{o=McpOptions.Load();}catch{o=new McpOptions{Roots=new[]{McpOptions.DefaultRoot}};}
-            LabelAt("인터넷 없는 대상 PC에 Claude·GPT용 로컬 MCP 클라이언트가 접속합니다.\r\n로그인은 원격제어의 ID/PW를 그대로 사용합니다. 외부 계정 인증은 없습니다.",20,18,580,48);
-            enabled=new CheckBox{Text="이 PC의 LAN MCP 사용",Checked=o.Enabled,Location=new Point(20,76),AutoSize=true};Controls.Add(enabled);
+            LabelAt("로컬·외부에서 같은 WebMCP HTTPS 주소로 ChatGPT·Claude를 연결합니다.\r\n파일·폴더 전송은 브라우저로 사용하며 LLM PC용 연결기 설치가 필요 없습니다.",20,18,580,48);
+            enabled=new CheckBox{Text="이 PC의 MCP 사용 (WebMCP 내부 연결 포함)",Checked=o.Enabled,Location=new Point(20,76),AutoSize=true};Controls.Add(enabled);
             LabelAt("MCP 포트",350,78,85,25);port=new NumericUpDown{Minimum=1,Maximum=65535,Value=o.Port,Location=new Point(440,75),Width=140};Controls.Add(port);
-            LabelAt("LLM PC의 허용 IPv4 / 대역 (쉼표로 구분)",20,118,580,23);
+            LabelAt("직접 LAN 연결 허용 IPv4 / 대역 (WebMCP 내부 연결은 자동 허용)",20,118,580,23);
             networks=new TextBox{Text=o.AllowedNetworks,Location=new Point(20,144),Width=580};Controls.Add(networks);
             LabelAt("파일 작업 폴더 (한 줄에 하나, 절대 경로)",20,183,580,23);
             roots=new TextBox{Text=string.Join("\r\n",o.Roots),Multiline=true,ScrollBars=ScrollBars.Vertical,Location=new Point(20,209),Size=new Size(580,94)};Controls.Add(roots);
             commands=new CheckBox{Text="프로그램·PowerShell 실행 허용",Checked=o.AllowCommands,Location=new Point(20,320),AutoSize=true};Controls.Add(commands);
             screen=new CheckBox{Text="화면 캡처 허용",Checked=o.AllowScreen,Location=new Point(355,320),AutoSize=true};Controls.Add(screen);
-            LabelAt("명령은 원격제어 실행 계정의 권한으로 실행됩니다 (서비스 모드는 SYSTEM).\r\n작업 폴더 제한은 파일 도구에 적용되며 PowerShell 명령을 제한하지 않습니다.\r\nMCP는 별도 LAN 포트를 사용합니다. 신뢰하는 망에서 LLM PC IP를 지정하세요.",20,357,580,68);
+            LabelAt("명령은 원격제어 실행 계정의 권한으로 실행됩니다 (서비스 모드는 SYSTEM).\r\n작업 폴더 제한은 파일 도구에 적용되며 PowerShell 명령을 제한하지 않습니다.\r\nWebMCP는 아래 웹 설정에서 개통합니다. 내부 MCP 포트는 화면 포트와 다릅니다.",20,357,580,68);
             status=LabelAt("",20,435,580,38);RefreshStatus();timer.Interval=2000;timer.Tick+=delegate{RefreshStatus();};timer.Start();
             AddButton("연결 패키지 폴더",20,482,155,delegate{
                 string here=Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location),folder=Path.Combine(here,"plugins");
                 if(!Directory.Exists(folder))folder=here;Process.Start(new ProcessStartInfo("explorer.exe",McpProcesses.Quote(folder)){UseShellExecute=true});
             });
-            AddButton("LLM PC 연결 설정",185,482,155,delegate{using(var f=new McpClientForm())f.ShowDialog(this);});
+            AddButton("WebMCP 주소 복사",185,482,155,delegate{try{string url=Config.Get("mcp_web_url");if(string.IsNullOrEmpty(url))throw new IOException("웹 설정에서 먼저 HTTPS 주소를 연결하세요.");Clipboard.SetText(url.TrimEnd('/')+"/mcp");status.Text="같은 주소를 로컬·외부 ChatGPT / Claude에 등록하세요.";}catch(Exception ex){MessageBox.Show(this,ex.Message,"WebMCP 주소",MessageBoxButtons.OK,MessageBoxIcon.Information);}});
             AddButton("웹 ChatGPT / Claude 설정",350,482,250,delegate{
                 try {
                     string setup=Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location),"uninstall.exe");
@@ -46,7 +46,7 @@ namespace RemoteControl
                 }catch(Exception ex){MessageBox.Show(this,ex.Message,"웹 연결 설정",MessageBoxButtons.OK,MessageBoxIcon.Information);}
             });
             AddButton("저장",400,524,95,Save);AddButton("닫기",505,524,95,delegate{Close();});
-            LabelAt("패키지는 설치 폴더의 plugins에 있습니다. LLM PC로 복사해 수동 등록하세요.",20,530,370,28).Font=new Font(Font.FontFamily,8);
+            LabelAt("같은 HTTPS MCP 주소로 연결 · 파일 전송은 브라우저에서 사용",20,530,370,28).Font=new Font(Font.FontFamily,8);
         }
         private Label LabelAt(string text,int x,int y,int w,int h){var c=new Label{Text=text,Location=new Point(x,y),Size=new Size(w,h)};Controls.Add(c);return c;}
         private void AddButton(string text,int x,int y,int w,Action action){var b=new Button{Text=text,Location=new Point(x,y),Size=new Size(w,30)};b.Click+=delegate{action();};Controls.Add(b);}

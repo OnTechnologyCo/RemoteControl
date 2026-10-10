@@ -75,6 +75,7 @@ namespace RemoteControl
     internal static class Auth {internal static string MakeHash(string s){return s;}internal static bool VerifyHash(string a,string b){return a==b;}internal static void DropAll(){}}
     internal static class MainForm {internal const string Version="1.8.10";}
     internal sealed class McpOptions {internal int Port=59331;internal static McpOptions Load(){return new McpOptions();}}
+    internal static class PrivateMcp {internal static string CurrentUrl="";internal static bool Ready=false;}
     internal static class Tunnel {internal static bool IsAlive(){return true;}internal static bool IsOpening{get{return false;}}}
     internal static class RemoteTunnel {internal static string Provider="tailscale",CurrentUrl="https://screen.example.ts.net";}
     internal sealed class TestStatus {internal string Url="",McpWebUrl="";internal bool McpWebReady=false;}

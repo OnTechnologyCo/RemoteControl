@@ -14,3 +14,10 @@ condition = "AND"
 paths = ['''(^|/)bench/(SshTunnelTest|StreamServerTest)\.cs$''']
 regexTarget = "secret"
 regexes = ['''^MDEyMzQ1Njc4OWFiY2RlZg={0,2}$''', '''^0123456789abcdef$''']
+
+[[allowlists]]
+description = "Fixed public WebSocket handshake nonce in isolated SSHTunnel integration test"
+condition = "AND"
+paths = ['''(^|/)web-mcp/test/sshtunnel\.test\.mjs$''']
+regexTarget = "secret"
+regexes = ['''^MDEyMzQ1Njc4OWFiY2RlZg={0,2}$''', '''^0123456789abcdef$''']

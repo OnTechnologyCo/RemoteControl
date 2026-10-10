@@ -9,7 +9,7 @@ namespace RemoteControl
     {
         private readonly ComboBox provider = new ComboBox();
         private readonly CheckBox auto = new CheckBox();
-        private readonly TextBox host, port, user, key, known, remote, url, tailscale;
+        private readonly TextBox host, port, user, key, fingerprint, name, tailscale;
         private readonly Panel ssh = new Panel(), ts = new Panel();
 
         internal TunnelForm()
@@ -23,7 +23,7 @@ namespace RemoteControl
             AddLabel(this, "연결 방식", 18, 23, 110);
             provider.SetBounds(140, 18, 495, 28);
             provider.DropDownStyle = ComboBoxStyle.DropDownList;
-            provider.Items.AddRange(new object[] { "private-tunnel (SSH)", "Tailscale Funnel", "사용 안 함 (LAN만)" });
+            provider.Items.AddRange(new object[] { "프라이빗 터널 (SSHTunnel)", "Tailscale Funnel", "사용 안 함 (LAN만)" });
             Controls.Add(provider);
             auto.Text = "외부망 연결 유지 · 다음 실행 때 자동 연결";
             auto.SetBounds(140, 56, 480, 28);
@@ -31,17 +31,20 @@ namespace RemoteControl
             Controls.Add(auto);
             ssh.SetBounds(0, 90, 660, 330); ts.SetBounds(0, 90, 660, 330);
             Controls.Add(ssh); Controls.Add(ts);
-            host = Field(ssh, "SSH 허브 주소", "sshhost", 0);
+            host = Field(ssh, "서버 주소", "sshhost", 0);
             port = Field(ssh, "SSH 접속 포트", "sshport", 36);
-            user = Field(ssh, "SSH 계정", "sshuser", 72);
-            key = Field(ssh, "개인키 파일", "sshkeyfile", 108);
-            known = Field(ssh, "known_hosts 파일", "sshknownhosts", 144);
-            remote = Field(ssh, "허브 수신 포트", "sshremoteport", 180);
-            url = Field(ssh, "브라우저 접속 주소", "sshurl", 216);
-            Browse(key, 108); Browse(known, 144);
-            AddLabel(ssh, "허브 주소·포트가 미정이면 비워 두고 자동 연결을 끈 채 저장할 수 있습니다.\r\n" +
-                "허브 수신은 127.0.0.1에 요청합니다. 브라우저 주소에는 허브 HTTPS 중계 주소를 넣으세요.\r\n" +
-                "known_hosts는 허브 관리자가 확인한 서버 키 파일입니다. 개인키와 다릅니다.", 18, 260, 620, 65);
+            port.Text = SshSettings.Load().Port;
+            user = Field(ssh, "터널 계정", "sshuser", 72);
+            key = Field(ssh, "인증키 (AccessKey)", "", 108);
+            key.Text = SshSettings.Load().AccessKey; key.UseSystemPasswordChar = true;
+            fingerprint = Field(ssh, "서버 지문", "sshfingerprint", 144);
+            name = Field(ssh, "터널 이름", "", 180); name.Text = SshSettings.Load().Name;
+            CheckBox showAccessKey = new CheckBox { Text = "인증키 보기", Left = 140, Top = 217, Width = 180 };
+            showAccessKey.CheckedChanged += delegate { key.UseSystemPasswordChar = !showAccessKey.Checked; };
+            ssh.Controls.Add(showAccessKey);
+            AddLabel(ssh, "SSHTunnel 관리 화면에서 발급한 계정·인증키·SHA256 서버 지문을 입력하세요.\r\n" +
+                "브라우저 주소는 https://랜덤키.터널도메인 형태로 자동 발급됩니다.\r\n" +
+                "서버의 웹 터널 및 DNS·HTTPS 설정이 필요합니다. 미정이면 자동 연결을 끄세요.", 18, 260, 620, 65);
             tailscale = Field(ts, "Tailscale 키", "", 0);
             tailscale.Text = Tunnel.LoadKey(); tailscale.UseSystemPasswordChar = true;
             CheckBox show = new CheckBox { Text = "키 보기", Left = 140, Top = 39, Width = 180 };
@@ -68,25 +71,15 @@ namespace RemoteControl
             TextBox box = new TextBox { Text = setting.Length == 0 ? "" : Config.Get(setting), Left = 140, Top = y, Width = 495 };
             parent.Controls.Add(box); return box;
         }
-        private void Browse(TextBox target, int y)
-        {
-            target.Width = 419;
-            Button browse = new Button { Text = "찾기", Left = 565, Top = y - 1, Width = 70, Height = 28 };
-            browse.Click += delegate { using (OpenFileDialog dialog = new OpenFileDialog()) {
-                dialog.CheckFileExists = true;
-                if (dialog.ShowDialog(this) == DialogResult.OK) target.Text = dialog.FileName;
-            } };
-            ssh.Controls.Add(browse);
-        }
         private void SaveSettings()
         {
             string p = provider.SelectedIndex == 0 ? "private" : provider.SelectedIndex == 1 ? "tailscale" : "off";
             SshSettings s = new SshSettings { Host = host.Text.Trim(), Port = port.Text.Trim(), User = user.Text.Trim(),
-                KeyFile = key.Text.Trim(), KnownHosts = known.Text.Trim(), RemotePort = remote.Text.Trim(), Url = url.Text.Trim().TrimEnd('/') };
+                AccessKey = key.Text.Trim(), Fingerprint = fingerprint.Text.Trim(), Name = name.Text.Trim() };
             if (p == "private" && auto.Checked)
             {
                 string error = s.Validate(true);
-                if (error.Length != 0) { MessageBox.Show(this, error, "SSH 설정"); return; }
+                if (error.Length != 0) { MessageBox.Show(this, error, "SSHTunnel 설정"); return; }
             }
             string newKey = tailscale.Text.Trim();
             if (p == "tailscale" && (auto.Checked || newKey.Length > 0) && !newKey.StartsWith("tskey-", StringComparison.Ordinal))
@@ -96,11 +89,11 @@ namespace RemoteControl
                 Dictionary<string, string> changes = new Dictionary<string, string> {
                     { "tunnel", p }, { "extauto", p != "off" && auto.Checked ? "1" : "0" },
                     { "sshhost", s.Host }, { "sshport", s.Port }, { "sshuser", s.User },
-                    { "sshkeyfile", s.KeyFile }, { "sshknownhosts", s.KnownHosts },
-                    { "sshremoteport", s.RemotePort }, { "sshurl", s.Url },
-                    // 키 파일을 같은 경로에서 고친 뒤 저장해도 영구 오류를 해제한다.
+                    { "sshfingerprint", s.Fingerprint }, { "sshname", s.Name },
+                    // 서버 권한이나 인증키를 고친 뒤 저장하면 영구 오류를 해제한다.
                     { "tunnelrevision", Guid.NewGuid().ToString("N") }
                 };
+                if (s.AccessKey != SshSettings.Load().AccessKey) SshSettings.AddKeySettings(changes, s.AccessKey);
                 if (p == "tailscale" && newKey != Tunnel.LoadKey())
                 {
                     if (Tunnel.IsConfigured && MessageBox.Show(this,

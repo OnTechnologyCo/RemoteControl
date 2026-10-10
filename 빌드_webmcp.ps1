@@ -1,10 +1,10 @@
-﻿# 기존 본체/서비스를 건드리지 않고 웹 중계 배포 패키지만 dist에 만든다.
+# 기존 본체/서비스를 건드리지 않고 웹 중계 배포 패키지만 dist에 만든다.
 $ErrorActionPreference='Stop'
 $root=$PSScriptRoot
 $source=Join-Path $root 'web-mcp'
 $stage=Join-Path $root 'dist\web-mcp'
 [void][IO.Directory]::CreateDirectory($stage)
-$allowed=@('node.exe','caddy.exe','server.mjs','tailscale-server.mjs','Install-TailscaleMcp.ps1','Disable-TailscaleMcp.ps1','gateway.mjs','check-certificate.mjs','WebMcpConfig.ps1','package.json','package-lock.json','node_modules','Install-WebMcp.ps1','Disable-WebMcp.ps1','Export-Plugin.ps1','README.md','THIRD-PARTY.txt','NODE-LICENSE.txt','CADDY-LICENSE.txt')
+$allowed=@('node.exe','caddy.exe','server.mjs','tailscale-server.mjs','private-server.mjs','Install-PrivateMcp.ps1','Disable-PrivateMcp.ps1','Install-TailscaleMcp.ps1','Disable-TailscaleMcp.ps1','gateway.mjs','auth-state.mjs','transfers.mjs','transfer-client.mjs','check-certificate.mjs','WebMcpConfig.ps1','package.json','package-lock.json','node_modules','Install-WebMcp.ps1','Disable-WebMcp.ps1','Export-Plugin.ps1','README.md','THIRD-PARTY.txt','NODE-LICENSE.txt','CADDY-LICENSE.txt')
 Get-ChildItem -LiteralPath $stage -Force | ForEach-Object { if($_.Name -notin $allowed){throw "배포 폴더에 예상하지 않은 파일이 있습니다: $($_.Name). 설정/인증서를 패키지에 담지 않습니다."} }
 $cache=Join-Path $root 'artifacts\web-mcp-downloads'
 [void][IO.Directory]::CreateDirectory($cache)
@@ -28,7 +28,7 @@ if((Get-AuthenticodeSignature -LiteralPath $node).Status -ne 'Valid'){throw '설
 if([version]((& $node --version).TrimStart('v')) -lt [version]'24.14.0'){throw 'Node 24.14.0 이상이 필요합니다.'}
 Copy-Item -LiteralPath $node -Destination (Join-Path $stage 'node.exe')
 Copy-Item -LiteralPath (Join-Path $caddyDir 'caddy.exe') -Destination (Join-Path $stage 'caddy.exe')
-foreach($name in @('package.json','package-lock.json','server.mjs','tailscale-server.mjs','Install-TailscaleMcp.ps1','Disable-TailscaleMcp.ps1','gateway.mjs','check-certificate.mjs','WebMcpConfig.ps1','Install-WebMcp.ps1','Disable-WebMcp.ps1','Export-Plugin.ps1','README.md')) {
+foreach($name in @('package.json','package-lock.json','server.mjs','tailscale-server.mjs','private-server.mjs','Install-PrivateMcp.ps1','Disable-PrivateMcp.ps1','Install-TailscaleMcp.ps1','Disable-TailscaleMcp.ps1','gateway.mjs','auth-state.mjs','transfers.mjs','transfer-client.mjs','check-certificate.mjs','WebMcpConfig.ps1','Install-WebMcp.ps1','Disable-WebMcp.ps1','Export-Plugin.ps1','README.md')) {
     Copy-Item -LiteralPath (Join-Path $source $name) -Destination $stage
 }
 Push-Location $stage

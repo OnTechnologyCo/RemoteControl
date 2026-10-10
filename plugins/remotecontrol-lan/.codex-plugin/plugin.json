@@ -1,19 +1,37 @@
-{
-  "name": "remotecontrol-lan",
-  "version": "1.8.10",
-  "description": "RemoteControl ID/PW로 오프라인 LAN PC의 파일, 프로그램, 로그와 화면을 확인합니다.",
-  "author": {
-    "name": "ontech"
-  },
-  "skills": "./skills/",
-  "interface": {
-    "displayName": "RemoteControl LAN",
-    "shortDescription": "오프라인 LAN PC 진단과 프로그램 배포",
-    "longDescription": "인터넷이 가능한 LLM PC에서 원격 PC의 RemoteControl MCP에 접속합니다. 파일 전송, 로그 확인, 프로그램 실행과 화면 확인을 지원합니다.",
-    "developerName": "ontech",
-    "category": "Productivity",
-    "capabilities": ["Interactive", "Write"],
-    "defaultPrompt": ["연결된 원격 PC를 확인하고 프로그램 오류 로그를 분석해줘."]
-  },
-  "mcpServers": "./.mcp.json"
-}
+{
+
+  "name": "remotecontrol-lan",
+
+  "version": "1.8.14",
+
+  "description": "RemoteControl ID/PW로 오프라인 LAN PC의 파일, 프로그램, 로그와 화면을 확인합니다.",
+
+  "author": {
+
+    "name": "ontech"
+
+  },
+
+  "skills": "./skills/",
+
+  "interface": {
+
+    "displayName": "RemoteControl LAN",
+
+    "shortDescription": "오프라인 LAN PC 진단과 프로그램 배포",
+
+    "longDescription": "인터넷이 가능한 LLM PC에서 원격 PC의 RemoteControl MCP에 접속합니다. 파일 전송, 로그 확인, 프로그램 실행과 화면 확인을 지원합니다.",
+
+    "developerName": "ontech",
+
+    "category": "Productivity",
+
+    "capabilities": ["Interactive", "Write"],
+
+    "defaultPrompt": ["연결된 원격 PC를 확인하고 프로그램 오류 로그를 분석해줘."]
+
+  },
+
+  "mcpServers": "./.mcp.json"
+
+}

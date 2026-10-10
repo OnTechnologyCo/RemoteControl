@@ -12,6 +12,7 @@ namespace RemoteControl
         {
             if(args.Length>0&&args[0]=="--mcp-job")return McpJobRunner.Run(args);
             if(args.Length>0&&args[0]=="--mcp-client")return McpClient.Run(args);
+            if(args.Length==2&&(args[0]=="--session-save"||args[0]=="--session-check"))return McpSessionsTest.Run(args[0],args[1]);
             if(args.Length==2&&args[0]=="--probe") {File.WriteAllText(args[1],"remote-probe-v1");Console.WriteLine("deployed binary executed");return 23;}
             if(args.Length==2&&args[0]=="--ui-proof") {
                 System.Windows.Forms.Application.EnableVisualStyles();
@@ -23,7 +24,9 @@ namespace RemoteControl
             string root=Path.GetFullPath(args[0]);Directory.CreateDirectory(root);
             var reserve=new TcpListener(IPAddress.Loopback,0);reserve.Start();int port=((IPEndPoint)reserve.LocalEndpoint).Port;reserve.Stop();
             var options=new McpOptions { Enabled=true, Port=port, Roots=new[]{root}, AllowCommands=true, AllowScreen=false };
-            using(var host=new McpHost(delegate{return options;},delegate(string user,string password){return user=="fixture"&&password=="fixture-only";},delegate(string message){Console.Error.WriteLine(message);}))
+            Func<McpHost> create=delegate{return new McpHost(delegate{return options;},delegate(string user,string password){return user=="fixture"&&password=="fixture-only";},delegate(string message){Console.Error.WriteLine(message);},Path.Combine(root,"mcp-sessions.bin"));};
+            McpHost host=create();
+            try
             {
                 host.Start();if(host.Port!=port)throw new Exception(host.Note);Console.WriteLine(port);Console.Out.Flush();
                 string command;while(!string.IsNullOrEmpty(command=Console.ReadLine())) {
@@ -31,9 +34,11 @@ namespace RemoteControl
                     if(command=="commands-off")options.AllowCommands=false;
                     if(command=="commands-on")options.AllowCommands=true;
                     if(command=="password-change")options.CredentialStamp="changed";
+                    if(command=="restart") {host.Dispose();Auth.DropAll();host=create();host.Start();}
                     host.Sync();Console.WriteLine("synced");Console.Out.Flush();
                 }
             }
+            finally {host.Dispose();}
             return 0;
         }
         private static void Draw(System.Windows.Forms.Form form,string path)

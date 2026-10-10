@@ -133,6 +133,16 @@ test('isolated RemoteControl + public OAuth gateway', {timeout:60000}, async t =
     r=await form('/token',{grant_type:'refresh_token',client_id:clientId,refresh_token:tokens.refresh_token,resource});assert.equal(r.status,400);
     r=await json('/mcp',{jsonrpc:'2.0',id:1,method:'ping'},{Authorization:'Bearer '+updated.access_token});assert.equal(r.status,401);
   });
+  await t.test('LAN host restart and more than eight hours do not require login',async()=>{
+    const a=await login();let r=await exchange(a.code,a.verify);assert.equal(r.status,200);const initial=await r.json();
+    const stored=readFileSync(join(remote,'mcp-sessions.bin'));
+    assert(!stored.includes(Buffer.from('fixture-only')));assert(!stored.includes(Buffer.from(gateway.provider.access.get(initial.access_token).grant.cookie.split('=')[1])));
+    await new Promise(resolve=>{fixture.stdout.once('data',resolve);fixture.stdin.write('restart\n');});
+    r=await json('/mcp',{jsonrpc:'2.0',id:1,method:'ping'},{Authorization:'Bearer '+initial.access_token});assert.equal(r.status,200);
+    clock+=9*60*60000;
+    r=await form('/token',{grant_type:'refresh_token',client_id:clientId,refresh_token:initial.refresh_token,resource});assert.equal(r.status,200,await r.clone().text());
+    const refreshed=await r.json();assert.equal((await json('/mcp',{jsonrpc:'2.0',id:1,method:'ping'},{Authorization:'Bearer '+refreshed.access_token})).status,200);
+  });
   await t.test('expired code and browser form cannot authorize',async()=>{
     const a=await login();clock+=301000;assert.equal((await exchange(a.code,a.verify)).status,400);
     const p=await authorize();clock+=11*60000;
@@ -169,4 +179,17 @@ test('access lifetime, connection lifetime and client-bound revocation',async()=
     now+=470*60000;await assert.rejects(gateway.provider.exchangeRefreshToken({client_id:'owner'},updated.refresh_token,undefined,new URL(c.publicUrl+'/mcp')));
     gateway.provider.sweep();assert.equal(logouts,1);assert.equal(gateway.provider.grants.size,0);
   }finally{gateway.close();}
+});
+
+test('temporary refresh failure returns HTTP 503 and retry succeeds without login',async t=>{
+  const root=resolve('../artifacts/web-mcp-test');mkdirSync(root,{recursive:true});const directory=mkdtempSync(join(root,'retry-'));
+  const c={publicUrl:'https://remote.example.test',listenPort:59432,lanPort:59431,proxyKey:randomBytes(32).toString('base64url')};let offline=true;
+  const gateway=createGateway(c,{directory,upstream:async()=>{if(offline)throw Error('temporary outage');return {status:200,body:'{}'};}});
+  const client=await gateway.provider.clientsStore.registerClient({redirect_uris:[CALLBACK],token_endpoint_auth_method:'none'});
+  const grant={clientId:client.client_id,cookie:'rcmcpid='+randomBytes(32).toString('base64url'),expires:Number.MAX_SAFE_INTEGER,revoked:false};gateway.provider.grants.add(grant);const tokens=gateway.provider.issue(grant);
+  const server=createServer(gateway.app);server.listen(0,'127.0.0.1');await once(server,'listening');
+  t.after(()=>{gateway.close();server.closeAllConnections();server.close();});
+  const send=()=>proxyFetch('http://127.0.0.1:'+server.address().port+'/token',{method:'POST',headers:{Host:'remote.example.test','X-RC-Proxy-Key':c.proxyKey,'X-RC-Client-IP':'198.51.100.3','X-Forwarded-Proto':'https','Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'refresh_token',client_id:client.client_id,refresh_token:tokens.refresh_token,resource:c.publicUrl+'/mcp'})});
+  let r=await send();assert.equal(r.status,503);assert.equal((await r.json()).error,'temporarily_unavailable');assert.equal(r.headers.get('retry-after'),'30');
+  offline=false;r=await send();assert.equal(r.status,200);assert(await gateway.provider.verifyAccessToken((await r.json()).access_token));
 });

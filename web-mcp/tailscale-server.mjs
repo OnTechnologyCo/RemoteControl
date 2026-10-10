@@ -11,16 +11,16 @@ export function tailscaleOrigin(value,port) {
 }
 
 // LocalService owns the gateway. SYSTEM writes only the short-lived address handoff.
-export function createTailscaleServer(config,{directory,readActive,now=Date.now,gatewayOptions={}}) {
+export function createTailscaleServer(config,{directory,readActive,now=Date.now,gatewayOptions={},origin=tailscaleOrigin,label='Tailscale'}) {
   validateConfig({...config,publicUrl:'https://validation.ts.net:'+config.publicPort});
-  tailscaleOrigin('https://validation.ts.net:'+config.publicPort,config.publicPort);
+  origin('https://validation.ts.net'+(config.publicPort===443?'':':'+config.publicPort),config.publicPort);
   let gateway=null,identity='';
   function sync() {
     let next=null;
     try {
       const active=readActive();
       if(active.expiresAt>now() && active.expiresAt<=now()+60000) {
-        const publicUrl=tailscaleOrigin(active.publicUrl,config.publicPort);
+        const publicUrl=origin(active.publicUrl,config.publicPort);
         next=validateConfig({...config,publicUrl,lanPort:active.lanPort});
       }
     }catch{}
@@ -31,7 +31,7 @@ export function createTailscaleServer(config,{directory,readActive,now=Date.now,
   }
   const server=createServer({maxHeaderSize:16384,requestTimeout:45000,headersTimeout:10000},(req,res)=>{
     sync();
-    if(!gateway){res.writeHead(503,{'Content-Type':'text/plain','Cache-Control':'no-store'});res.end('Waiting for the RemoteControl Tailscale connection');return;}
+    if(!gateway){res.writeHead(503,{'Content-Type':'text/plain','Cache-Control':'no-store'});res.end('Waiting for the RemoteControl '+label+' connection');return;}
     gateway.app(req,res);
   });
   server.maxConnections=32;

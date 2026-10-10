@@ -84,6 +84,18 @@ try {
     Assert ((Field $options 'WebTailscale') -and (Field $options 'WebPublicPort') -eq 10000 -and (Field $options 'WebGatewayPort') -eq 59535 -and $null -eq (Field $options 'WebUrl')) 'Tailscale mode incorrectly requires a manually entered URL'
     $mode.SelectedIndex=0
     Assert ($address.Text -ceq 'https://later.example.test' -and $port.Value -eq 59443 -and -not $address.ReadOnly) 'Switching back changed the manual address/port'
+    $mode.SelectedIndex=2
+    Assert ($address.ReadOnly -and -not $cert.Enabled -and $gateway.Enabled -and -not $port.Enabled -and -not $defaultPort.Enabled -and $port.Value -eq 443) 'Private automatic controls invalid'
+    $gateway.Value=59536
+    $connection.GetType().GetMethod('Apply',$instance).Invoke($connection,@($options))|Out-Null
+    Assert ((Field $options 'WebPrivate') -and -not (Field $options 'WebTailscale') -and (Field $options 'WebPublicPort') -eq 443 -and (Field $options 'WebGatewayPort') -eq 59536 -and $null -eq (Field $options 'WebUrl')) 'Private mode incorrectly requires a manual URL or certificate'
+    $web.GetMethod('Validate',$static).Invoke($null,@($options))|Out-Null
+    $mode.SelectedIndex=1
+    Assert ($gateway.Value -eq 59535 -and $port.Value -eq 10000) 'Private mode changed saved Tailscale ports'
+    $mode.SelectedIndex=2
+    Assert ($gateway.Value -eq 59536 -and $port.Value -eq 443) 'Private local gateway selection lost'
+    $mode.SelectedIndex=0
+    Assert ($address.Text -ceq 'https://later.example.test' -and $port.Value -eq 59443 -and -not $address.ReadOnly) 'Private mode changed the manual address/port'
     # A manually entered Tailscale hostname is still manual; never infer auto mode from the hostname.
     $address.Text='https://manual.example.ts.net';$port.Value=10000
     $connection.GetType().GetMethod('Apply',$instance).Invoke($connection,@($options))|Out-Null
@@ -94,7 +106,7 @@ $stage=$web.GetMethod('ExtractPackages',$static)
 $stage.Invoke($null,[string[]]@($dest,''))|Out-Null
 $plugin=Join-Path $dest 'plugins\RemoteControl_WebPlugin.zip'
 Assert (-not (Test-Path -LiteralPath $plugin)) 'Deferred fresh install generated a misleading web plugin'
-foreach($relative in @('plugins\RemoteControl_MCP.zip','plugins\RemoteControl_Claude.mcpb','web-mcp\Install-WebMcp.ps1','web-mcp\Install-TailscaleMcp.ps1','web-mcp\tailscale-server.mjs','web-mcp\node.exe')){
+foreach($relative in @('plugins\RemoteControl_MCP.zip','plugins\RemoteControl_Claude.mcpb','web-mcp\Install-WebMcp.ps1','web-mcp\Install-TailscaleMcp.ps1','web-mcp\tailscale-server.mjs','web-mcp\private-server.mjs','web-mcp\Install-PrivateMcp.ps1','web-mcp\Disable-PrivateMcp.ps1','web-mcp\node.exe')){
     Assert (Test-Path -LiteralPath (Join-Path $dest $relative)) "Missing deferred package: $relative"
 }
 $web.GetMethod('WritePlugin',$static).Invoke($null,[string[]]@($plugin,'https://later.example.test:59443'))|Out-Null

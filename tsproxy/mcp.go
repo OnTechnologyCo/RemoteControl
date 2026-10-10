@@ -60,7 +60,8 @@ func sharedMCP(screen http.Handler, target, host, key string) (http.Handler, err
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/mcp", "/authorize", "/connect", "/token", "/register", "/revoke",
+		case "/files", "/files/open", "/files/api", "/files/client.js", "/files/download",
+			"/mcp", "/authorize", "/connect", "/token", "/register", "/revoke",
 			"/.well-known/oauth-authorization-server", "/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp":
 			mcp.ServeHTTP(w, r)
 		default:

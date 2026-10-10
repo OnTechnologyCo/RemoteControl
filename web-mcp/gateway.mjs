@@ -5,6 +5,8 @@ import { request } from 'node:http';
 import { isIP } from 'node:net';
 import { existsSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
+import { AuthState } from './auth-state.mjs';
+import { attachTransfers, fileTool } from './transfers.mjs';
 import { mcpAuthRouter, createOAuthMetadata } from '@modelcontextprotocol/sdk/server/auth/router.js';
 import { InvalidClientMetadataError, InvalidGrantError, InvalidTargetError, InvalidScopeError, InvalidRequestError, InvalidTokenError, TemporarilyUnavailableError } from '@modelcontextprotocol/sdk/server/auth/errors.js';
 
@@ -109,14 +111,40 @@ class Provider {
     this.issuer = config.publicUrl + '/'; this.resource = config.publicUrl + '/mcp';
     this.clientsStore = new Clients(directory, metadata);
     this.pending = new Map(); this.codes = new Map(); this.access = new Map(); this.refresh = new Map(); this.grants = new Set();
+    this.state = new AuthState(directory, config.proxyKey, this.issuer);
+    this.restore();
     this.timer = setInterval(() => this.sweep(), minute); this.timer.unref();
+  }
+  restore() {
+    const saved = this.state.read();
+    if (!saved) return;
+    if (saved.version !== 1 || !Array.isArray(saved.grants) || !Array.isArray(saved.access) || !Array.isArray(saved.refresh) || saved.grants.length > 64 || saved.access.length > 256 || saved.refresh.length > 4096) throw Error('Invalid OAuth state');
+    const grants = new Map();
+    for (const grant of saved.grants) {
+      if (!/^[A-Za-z0-9_-]{43}$/.test(grant.id) || typeof grant.clientId !== 'string' || typeof grant.cookie !== 'string' || grant.cookie.length > 256 || !Number.isSafeInteger(grant.expires) || grants.has(grant.id)) throw Error('Invalid OAuth grant');
+      grant.revoked = false; grant.authorized = true; grants.set(grant.id, grant); this.grants.add(grant);
+    }
+    for (const [name, table] of [['access',this.access],['refresh',this.refresh]]) for (const row of saved[name]) {
+      if (!/^[A-Za-z0-9_-]{43}$/.test(row.token) || !grants.has(row.grant) || !Number.isSafeInteger(row.expires) || (name === 'refresh' && typeof row.used !== 'boolean') || table.has(row.token)) throw Error('Invalid OAuth token');
+      table.set(row.token, {grant:grants.get(row.grant), expires:row.expires, ...(name === 'refresh' ? {used:row.used} : {})});
+    }
+    this.sweep();
+  }
+  persist() {
+    const grants = [...this.grants].filter(g => g.authorized && !g.revoked);
+    const ids = new Set(grants.map(g => g.id));
+    const rows = table => [...table].filter(([,v]) => ids.has(v.grant.id)).map(([token,v]) => ({token, grant:v.grant.id, expires:v.expires, ...(table === this.refresh ? {used:v.used} : {})}));
+    try { this.state.write({version:1, grants:grants.map(g => ({id:g.id,clientId:g.clientId,clientName:g.clientName,cookie:g.cookie,expires:g.expires})), access:rows(this.access), refresh:rows(this.refresh)}); }
+    catch { throw new TemporarilyUnavailableError('Authentication storage temporarily unavailable'); }
   }
   checkResource(resource) { if (resource?.href !== this.resource) throw new InvalidTargetError('resource must match this MCP server'); }
   checkScopes(scopes) { if (scopes?.some(s => s !== SCOPE)) throw new InvalidScopeError('Only remotecontrol scope is supported'); }
   sweep() {
+    let changed = false;
     for (const item of this.codes.values()) if (item.expires <= this.now()) this.drop(item.grant);
-    for (const table of [this.pending, this.codes, this.access, this.refresh]) for (const [key, v] of table) if (v.expires <= this.now()) table.delete(key);
+    for (const table of [this.pending, this.codes, this.access, this.refresh]) for (const [key, v] of table) if (v.expires <= this.now()) { table.delete(key); if (table === this.access || table === this.refresh) changed = true; }
     for (const grant of this.grants) if (grant.expires <= this.now()) this.drop(grant);
+    if (changed) this.persist();
   }
   async authorize(client, params, res) {
     this.sweep(); this.checkResource(params.resource); this.checkScopes(params.scopes);
@@ -147,12 +175,12 @@ class Provider {
     let result;
     try { result = await this.upstream('/login', {body: JSON.stringify({user, password})}); }
     catch { return res.status(503).type('text').send('이 PC의 원격제어 MCP에 연결할 수 없습니다. 실행 상태를 확인하세요.'); }
-    // 비밀번호는 디스크, 토큰, 로그에 남기지 않는다. LAN 서버의 제한된 수명 쿠키만 메모리에 보관한다.
+    // 비밀번호는 디스크, 토큰, 로그에 남기지 않는다. 승인된 인증 쿠키와 토큰만 암호화해 보관한다.
     req.body.password = '';
     if (result.status !== 200) return res.status(result.status === 429 ? 429 : 401).type('text').send(result.status === 429 ? '로그인 시도가 반복되어 잠시 잠겼습니다. 잠시 후 사용 중인 앱에서 다시 연결하세요.' : '원격제어 아이디 또는 비밀번호가 맞지 않습니다. 사용 중인 앱에서 다시 연결하세요.');
     const cookie = result.headers['set-cookie']?.find(c => /^rcmcpid=[A-Za-z0-9_-]+;/.test(c))?.split(';')[0];
     if (!cookie) return res.status(502).type('text').send('원격제어 로그인 응답을 확인할 수 없습니다.');
-    const grant = { clientId: pending.clientId, clientName:CALLBACKS.get(pending.redirectUri), cookie, expires: this.now() + 470 * minute, revoked: false };
+    const grant = { clientId: pending.clientId, clientName:CALLBACKS.get(pending.redirectUri), cookie, expires: Number.MAX_SAFE_INTEGER, revoked: false };
     this.grants.add(grant);
     const code = random(); this.codes.set(code, { ...pending, grant, expires: this.now() + 5 * minute });
     redirect.searchParams.set('code', code); returnToClient(res, redirect, true);
@@ -170,13 +198,18 @@ class Provider {
     this.codes.delete(code);
     return this.issue(item.grant);
   }
-  issue(grant) {
+  issue(grant, consumed = null) {
     this.sweep();
-    if (grant.revoked || grant.expires <= this.now() || this.access.size >= 256 || this.refresh.size >= 256) throw new InvalidGrantError('Connection expired or token limit reached');
+    if (grant.revoked || grant.expires <= this.now()) throw new InvalidGrantError('Connection expired');
+    if (this.access.size >= 256 || this.refresh.size >= 4096) throw new TemporarilyUnavailableError('OAuth token limit reached');
     const access_token = random(), refresh_token = random();
     const expires_in = Math.min(3600, Math.floor((grant.expires - this.now()) / 1000));
     this.access.set(access_token, {grant, expires: this.now() + expires_in * 1000});
     this.refresh.set(refresh_token, {grant, expires: grant.expires, used: false});
+    const previous = consumed && {used:consumed.used, expires:consumed.expires};
+    if (consumed) { consumed.used = true; consumed.expires = Math.min(grant.expires, this.now() + 24 * 60 * minute); }
+    grant.id ||= random(); grant.authorized = true;
+    try { this.persist(); } catch (error) { this.access.delete(access_token); this.refresh.delete(refresh_token); if (consumed) Object.assign(consumed, previous); throw error; }
     return { access_token, token_type: 'Bearer', expires_in, refresh_token, scope: SCOPE };
   }
   async exchangeRefreshToken(client, token, scopes, resource) {
@@ -185,12 +218,16 @@ class Provider {
     if (!item || item.expires <= this.now() || item.grant.clientId !== client.client_id || item.grant.revoked) throw new InvalidGrantError('Invalid refresh token');
     // 지난 refresh 토큰의 재사용은 같은 연결에서 발급한 토큰 전체를 폐기한다.
     if (item.used) { this.drop(item.grant); throw new InvalidGrantError('Refresh token reused'); }
-    item.used = true;
+    if (item.busy) throw new TemporarilyUnavailableError('Refresh already in progress');
+    item.busy = true;
     let probe;
-    try { probe = await this.upstream('/mcp', { cookie: item.grant.cookie, body: JSON.stringify({jsonrpc:'2.0',id:1,method:'ping'}) }); }
-    catch { this.drop(item.grant); throw new InvalidGrantError('Reconnect after LAN transport failure'); }
-    if (probe.status !== 200) { this.drop(item.grant); throw new InvalidGrantError('RemoteControl login expired'); }
-    return this.issue(item.grant);
+    try {
+      try { probe = await this.upstream('/mcp', { cookie: item.grant.cookie, body: JSON.stringify({jsonrpc:'2.0',id:1,method:'ping'}) }); }
+      catch { throw new TemporarilyUnavailableError('LAN MCP temporarily unreachable; retry refresh'); }
+      if (probe.status === 401) { this.drop(item.grant); throw new InvalidGrantError('RemoteControl login revoked'); }
+      if (probe.status !== 200) throw new TemporarilyUnavailableError('LAN MCP temporarily unavailable; retry refresh');
+      return this.issue(item.grant, item);
+    } finally { item.busy = false; }
   }
   async verifyAccessToken(token) {
     const item = this.access.get(token);
@@ -205,9 +242,10 @@ class Provider {
     if (grant.revoked) return;
     grant.revoked = true; this.grants.delete(grant);
     for (const table of [this.codes, this.access, this.refresh]) for (const [key, item] of table) if (item.grant === grant) table.delete(key);
+    this.persist();
     this.upstream('/logout', {cookie: grant.cookie}).catch(() => {});
   }
-  close() { clearInterval(this.timer); for (const grant of this.grants) this.drop(grant); }
+  close() { clearInterval(this.timer); for (const grant of this.grants) if (!grant.authorized) this.drop(grant); this.persist(); }
 }
 
 function returnToClient(res, redirect, allowed) {
@@ -228,7 +266,7 @@ function loginPage(csrf, origin, clientName) {
   return `<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>원격제어 · ${clientName} 연결</title>
 <style>body{font:16px system-ui,sans-serif;background:#101a29;color:#eef3fa;margin:0;padding:32px 20px}main{max-width:430px;margin:5vh auto;background:#1b2a40;padding:32px;border-radius:16px}h1{font-size:25px}p{line-height:1.65;color:#ced9e8}label{display:block;margin-top:18px}input{box-sizing:border-box;width:100%;padding:12px;margin-top:7px;border:1px solid #8091ab;border-radius:7px;font:inherit}button{font:inherit;cursor:pointer;padding:12px 16px;border:0;border-radius:7px;margin:24px 8px 0 0;background:#73d9ee;color:#10202c}button[value=deny]{background:#384c66;color:white}small{overflow-wrap:anywhere;color:#b3c6df}</style>
 <main><small>${html(origin)}</small><h1>${clientName}에 원격제어 연결</h1><p>이 PC의 원격제어 아이디와 비밀번호를 입력하세요.</p><p>연결하면 ${clientName}가 MCP 설정에서 허용한 파일, 명령 실행, 화면 조회 기능을 사용합니다. 실행 권한은 대상 원격제어 프로그램의 권한을 따릅니다.</p>
-<form method="post" action="/connect"><input type="hidden" name="csrf" value="${html(csrf)}"><label>원격제어 아이디<input name="user" autocomplete="username" maxlength="128" required></label><label>비밀번호<input name="password" type="password" autocomplete="current-password" maxlength="1024" required></label><button name="decision" value="allow">로그인하고 연결</button><button name="decision" value="deny" formnovalidate>취소</button></form><p><small>비밀번호는 ${clientName}에 전달하거나 이 중계 프로그램에 저장하지 않습니다. 약 8시간 후 또는 프로그램 재시작 후 다시 연결해야 합니다.</small></p></main></html>`;
+<form method="post" action="/connect"><input type="hidden" name="csrf" value="${html(csrf)}"><label>원격제어 아이디<input name="user" autocomplete="username" maxlength="128" required></label><label>비밀번호<input name="password" type="password" autocomplete="current-password" maxlength="1024" required></label><button name="decision" value="allow">로그인하고 연결</button><button name="decision" value="deny" formnovalidate>취소</button></form><p><small>비밀번호는 ${clientName}에 전달하거나 이 중계 프로그램에 저장하지 않습니다. 인증은 재시작 후에도 유지되며, 연결 해제 또는 비밀번호 변경 시 해제됩니다.</small></p></main></html>`;
 }
 
 export function createGateway(config, { directory, upstream, metadata = getClientMetadata, now = Date.now, audit = () => {} } = {}) {
@@ -277,6 +315,13 @@ export function createGateway(config, { directory, upstream, metadata = getClien
   app.post('/connect', rateLimit({windowMs:minute,limit:10,keyGenerator:()=> 'login',standardHeaders:true,legacyHeaders:false}), express.urlencoded({extended:false,limit:'8kb',parameterLimit:8}), (req,res,next)=>provider.login(req,res).catch(next));
   // OAuth 요청과 MCP 요청은 본문 제한이 다르다. 인증 경로에서 큰 JSON을 먼저 읽지 않는다.
   app.use(['/authorize','/token','/register','/revoke'], express.urlencoded({extended:false,limit:'16kb',parameterLimit:20}), express.json({limit:'16kb'}));
+  app.use('/token', (req, res, next) => {
+    // SDK는 OAuthError를 모두 400으로 보낸다. 임시 오프라인은 재로그인 대신 갱신을 재시도할 수 있게 503으로 구분한다.
+    const json = res.json.bind(res);
+    res.json = body => { if (body?.error === 'temporarily_unavailable') res.status(503).set('Retry-After','30'); return json(body); };
+    next();
+  });
+  const files = attachTransfers(app,provider,c,now);
   app.use(mcpAuthRouter(authOptions));
   app.all('/mcp', async (req,res,next) => {
     let grant;
@@ -288,7 +333,9 @@ export function createGateway(config, { directory, upstream, metadata = getClien
     try {
       const rpc = req.body;
       if (!rpc || typeof rpc !== 'object' || Array.isArray(rpc) || rpc.jsonrpc !== '2.0' || typeof rpc.method !== 'string') return res.status(400).json({error:'Invalid JSON-RPC request'});
-      const reply = await provider.upstream('/mcp', {cookie:req.grant.cookie, body:JSON.stringify(rpc)});
+      const opening = rpc.method === 'tools/call' && rpc.params?.name === fileTool.name;
+      const forwarded = opening ? {jsonrpc:'2.0',id:rpc.id,method:'ping'} : rpc;
+      const reply = await provider.upstream('/mcp', {cookie:req.grant.cookie, body:JSON.stringify(forwarded)});
       if(reply.status === 401) {
         provider.drop(req.grant);
         if(rpc.method === 'tools/call' && req.grant.clientName !== 'Claude') return res.json({jsonrpc:'2.0',id:rpc.id,result:{isError:true,content:[{type:'text',text:'원격제어 로그인이 만료되었습니다. 다시 연결하세요.'}],_meta:{'mcp/www_authenticate':[challenge]}}});
@@ -296,9 +343,10 @@ export function createGateway(config, { directory, upstream, metadata = getClien
       }
       if(reply.status === 202) return res.status(202).end();
       if(reply.status !== 200) return res.status(502).json({error:'LAN MCP request failed; operation was not retried'});
-      const value = JSON.parse(reply.body);
+      const value = opening ? {jsonrpc:'2.0',id:rpc.id,result:{content:[{type:'text',text:JSON.stringify(files.open(req.grant))}]}} : JSON.parse(reply.body);
+      if(rpc.method === 'tools/list' && Array.isArray(value.result?.tools)) value.result.tools.push({...fileTool});
       if(rpc.method === 'tools/list' && Array.isArray(value.result?.tools)) for(const tool of value.result.tools) { tool.securitySchemes = [{type:'oauth2',scopes:[SCOPE]}]; tool._meta = {...tool._meta,securitySchemes:tool.securitySchemes}; }
-      if(rpc.method === 'initialize' && value.result) { value.result.serverInfo.name = 'RemoteControl Web'; value.result.instructions = 'Always call pc_get_status before any change and verify the target hostname. Paths refer to the remote PC, and commands run with the remote agent Windows rights. Read-only status queries may run immediately. On a read-only connection or authentication failure, do not immediately ask the user to log in: retry the same status/read call up to two times. If a retry succeeds, continue without asking for login. Distinguish authentication failures from offline, transport, or internal failures; if the PC or MCP server is unreachable, report it as offline or unreachable instead of requesting login. Ask the user to reconnect or log in only after repeated explicit reauthentication_required or invalid_token failures. Never automatically retry shutdown, reboot, delete, kill, write, or other state-changing operations after an ambiguous timeout or transport failure; verify the current state first and require clear user intent for destructive actions. For tracked process output, continue from next_offset and avoid duplicate logs. Do not invent unavailable tools or capabilities. Web connection does not include local pc_upload_file/pc_download_file tools.'; }
+      if(rpc.method === 'initialize' && value.result) { value.result.serverInfo.name = 'RemoteControl Web'; value.result.instructions = 'Always call pc_get_status before any change and verify the target hostname. Paths refer to the remote PC, and commands run with the remote agent Windows rights. Read-only status queries may run immediately. On a read-only connection or authentication failure, do not immediately ask the user to log in: retry the same status/read call up to two times. If a retry succeeds, continue without asking for login. Distinguish authentication failures from offline, transport, or internal failures; if the PC or MCP server is unreachable, report it as offline or unreachable instead of requesting login. Ask the user to reconnect or log in only after repeated explicit reauthentication_required or invalid_token failures. Never automatically retry shutdown, reboot, delete, kill, write, or other state-changing operations after an ambiguous timeout or transport failure; verify the current state first and require clear user intent for destructive actions. For tracked process output, continue from next_offset and avoid duplicate logs. Do not invent unavailable tools or capabilities. Use pc_open_file_transfer for a user browser file/folder picker and streamed downloads without a local connector. For direct binary data use pc_begin_upload, pc_write_upload_chunk, pc_finish_upload, pc_prepare_download and pc_read_download_chunk; verify SHA-256. Retain transfer IDs; query status after a failed chunk before resuming. Local and external clients use this same HTTPS /mcp URL.'; }
       res.json(value);
     } catch(error) { next(error); }
   });

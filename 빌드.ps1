@@ -15,6 +15,8 @@ $buildDir = Join-Path $root 'dist'
 [void][System.IO.Directory]::CreateDirectory($buildDir)
 $out = Join-Path $buildDir 'RemoteControl.exe'
 
+& (Join-Path $root '빌드_sshtunnel.ps1')
+
 $srcs = Get-ChildItem (Join-Path $root "src") -Filter *.cs | ForEach-Object { $_.FullName }
 
 $res = @(
@@ -22,6 +24,7 @@ $res = @(
     "web\viewer.js,viewer.js"
     "web\login.html,login.html"
     "tsproxy.exe.gz,tsproxy.exe.gz"
+    "sshtunnel-client.exe.gz,sshtunnel-client.exe.gz"
     "remotecontrol.ico,remotecontrol.ico"
     "rc-busy.ico,rc-busy.ico"
 ) | ForEach-Object {

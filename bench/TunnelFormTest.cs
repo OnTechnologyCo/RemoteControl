@@ -23,14 +23,27 @@ namespace RemoteControl
                     Save(form);
                     if (form.DialogResult != DialogResult.OK || Config.Get("tunnel") != "private" || Config.Get("extauto") != "0") throw new Exception("Blank SSH draft must save with automatic connection off");
                 }
-                Console.WriteLine("PASS blank private-tunnel settings can be saved before address/ports are assigned");
+                Console.WriteLine("PASS blank SSHTunnel settings save without automatic connection");
+                Config.Set("tunnel", "private");
+                using (var form = new TunnelForm())
+                {
+                    if (!((TextBox)Field(form,"key")).UseSystemPasswordChar || ((TextBox)Field(form,"port")).Text!="2222") throw new Exception("Key must be masked and SSH port default to 2222");
+                    ((TextBox)Field(form,"host")).Text="relay.example.com";
+                    ((TextBox)Field(form,"user")).Text="remote";
+                    ((TextBox)Field(form,"key")).Text=new string('a',64);
+                    ((TextBox)Field(form,"fingerprint")).Text="SHA256:"+new string('A',43);
+                    ((CheckBox)Field(form,"auto")).Checked=true; Save(form);
+                    if (form.DialogResult!=DialogResult.OK || Config.Get("sshaccesskey")==new string('a',64) || SshSettings.Load().AccessKey!=new string('a',64)) throw new Exception("Issued credentials must save and restore encrypted");
+                }
+                Console.WriteLine("PASS SSHTunnel form stores masked AccessKey with DPAPI");
+
                 Config.Set("tskey", "tskey-test-value"); Config.Set("sshhost", "draft.example");
                 using (var form = new TunnelForm())
                 {
                     ((ComboBox)Field(form, "provider")).SelectedIndex = 2; Save(form);
                     if (Config.Get("tunnel") != "off" || Config.Get("sshhost") != "draft.example" || Config.Get("tskey") != "tskey-test-value") throw new Exception("Switch must preserve both providers' credentials");
                 }
-                Console.WriteLine("PASS provider selection preserves SSH settings and Tailscale key");
+                Console.WriteLine("PASS provider selection preserves SSHTunnel settings and Tailscale key");
                 using (var form = new TunnelForm())
                 {
                     ((ComboBox)Field(form, "provider")).SelectedIndex = 1;

@@ -157,7 +157,8 @@ namespace RemoteControl
 
                         string u = RemoteTunnel.CurrentUrl;
 
-                        bool healthy = Probe(u);
+                        bool routeFailure; string detail;
+                        bool healthy = Probe(u, out routeFailure, out detail);
                         // 왕복 중에 방식을 바꿨거나 닫았다면 옛 주소로 알림/장비 이름을 남기지 않는다.
                         if (!enabled || currentSettings != RemoteTunnel.SettingsFingerprint()) continue;
                         if (healthy)
@@ -169,6 +170,16 @@ namespace RemoteControl
 
                             Healthy(u, ref downSince, ref alertedDown);
                             lastUrl = u;
+                            continue;
+                        }
+
+                        // DNS/443/인증서 오류는 SSH 터널을 새로 열어도 고쳐지지 않는다.
+                        // 살아 있는 SSH 연결과 발급 주소를 보존하고 서버 개통 문제를 표시한다.
+                        if (!ShouldReopen(RemoteTunnel.Provider, routeFailure))
+                        {
+                            fails = 0;
+                            note = "SSH 연결됨 · 웹 접속 확인 실패: " + detail;
+                            Say(note);
                             continue;
                         }
 
@@ -336,7 +347,14 @@ namespace RemoteControl
         /// 허브 프록시의 502/로그인 리디렉션은 성공이 아니다. 이 앱의 /ping 응답까지 확인한다.
         /// </summary>
         internal static bool Probe(string baseUrl)
+        { bool routeFailure; string detail; return Probe(baseUrl, out routeFailure, out detail); }
+
+        internal static bool ShouldReopen(string provider, bool routeFailure)
+        { return provider != "private" || routeFailure; }
+
+        internal static bool Probe(string baseUrl, out bool routeFailure, out string detail)
         {
+            routeFailure = false; detail = "발급 주소가 없습니다";
             if (string.IsNullOrEmpty(baseUrl)) return false;
 
             Https.EnsureTls();
@@ -356,24 +374,36 @@ namespace RemoteControl
 
                 using (HttpWebResponse resp = (HttpWebResponse)r.GetResponse())
                 {
+                    detail = "HTTP " + (int)resp.StatusCode;
+                    routeFailure = BrokenRoute(resp.StatusCode);
                     if (resp.StatusCode != HttpStatusCode.OK) return false;
                     using (System.IO.Stream body = resp.GetResponseStream())
                     {
                         byte[] value = new byte[3];
                         int count = 0, n;
                         while (count < value.Length && (n = body.Read(value, count, value.Length - count)) > 0) count += n;
-                        return count == 2 && value[0] == (byte)'o' && value[1] == (byte)'k';
+                        bool ok = count == 2 && value[0] == (byte)'o' && value[1] == (byte)'k';
+                        detail = ok ? "정상" : "원격제어 /ping 응답이 아닙니다";
+                        return ok;
                     }
                 }
             }
             catch (WebException we)
             {
-                // 답이 오기는 왔다 = 길은 뚫려 있다.
+                var response = we.Response as HttpWebResponse;
+                if (response != null) { detail = "HTTP " + (int)response.StatusCode; routeFailure = BrokenRoute(response.StatusCode); }
+                else if (we.Status == WebExceptionStatus.NameResolutionFailure) detail = "와일드카드 DNS를 확인하세요";
+                else if (we.Status == WebExceptionStatus.TrustFailure || we.Status == WebExceptionStatus.SecureChannelFailure) detail = "와일드카드 HTTPS 인증서를 확인하세요";
+                else if (we.Status == WebExceptionStatus.ConnectFailure) detail = "서버 HTTPS 443 포트·방화벽·포트 전달을 확인하세요";
+                else detail = "HTTPS 응답을 받지 못했습니다 (" + we.Status + ")";
                 if (we.Response != null) { try { we.Response.Close(); } catch { } }
                 return false;
             }
-            catch { return false; }
+            catch { detail = "HTTPS 확인 중 오류가 발생했습니다"; return false; }
         }
+
+        private static bool BrokenRoute(HttpStatusCode code)
+        { return code == HttpStatusCode.NotFound || code == HttpStatusCode.BadGateway || code == HttpStatusCode.GatewayTimeout; }
 
         /// <summary>
         /// 인터넷이 되는가. Tailscale 관제쪽에 붙어 본다.

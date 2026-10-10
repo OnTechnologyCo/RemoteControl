@@ -1,4 +1,4 @@
-﻿// 대리 프로세스. 서비스가 사람이 앉아 있는 세션에 SYSTEM 권한으로 밀어 넣는 쪽.
+// 대리 프로세스. 서비스가 사람이 앉아 있는 세션에 SYSTEM 권한으로 밀어 넣는 쪽.
 //
 // 창이 없다. 실제로 화면을 잡고 입력을 넣고 웹을 서비스하는 것은 전부 여기다.
 // 창(MainForm)은 이 상태를 파일로 읽어 보여 주기만 한다.
@@ -79,6 +79,7 @@ namespace RemoteControl
                 Config.Reload();
                 RemoteTunnel.SyncSettings();
                 TailscaleMcp.Tick();
+                PrivateMcp.Tick();
 
                 int want = Config.Port;
                 if (want != server.Port && Config.HasPassword)
@@ -168,9 +169,9 @@ namespace RemoteControl
                 sb.Append("time=").Append(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")).Append("\r\n");
                 sb.Append("port=").Append(server.Port).Append("\r\n");
                 sb.Append("mcpnote=").Append(server.McpNote.Replace("\r"," ").Replace("\n"," ")).Append("\r\n");
-                sb.Append("mcpweburl=").Append(TailscaleMcp.CurrentUrl).Append("\r\n");
-                sb.Append("mcpwebready=").Append(TailscaleMcp.Ready ? "1" : "0").Append("\r\n");
-                sb.Append("mcpwebnote=").Append(TailscaleMcp.Note.Replace("\r"," ").Replace("\n"," ")).Append("\r\n");
+                sb.Append("mcpweburl=").Append((Config.Get("mcp_web_mode")=="private"?PrivateMcp.CurrentUrl:TailscaleMcp.CurrentUrl)).Append("\r\n");
+                sb.Append("mcpwebready=").Append((Config.Get("mcp_web_mode")=="private"?PrivateMcp.Ready:TailscaleMcp.Ready) ? "1" : "0").Append("\r\n");
+                sb.Append("mcpwebnote=").Append((Config.Get("mcp_web_mode")=="private"?PrivateMcp.Note:TailscaleMcp.Note).Replace("\r"," ").Replace("\n"," ")).Append("\r\n");
                 sb.Append("viewers=").Append(server.Viewers).Append("\r\n");
 
                 // 브릿지로 하위 PC 에 붙어 있는 사람. 이 PC 화면을 보는 것은 아니라서 따로 센다.

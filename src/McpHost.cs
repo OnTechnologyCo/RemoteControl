@@ -14,7 +14,8 @@ namespace RemoteControl
         private readonly Func<McpOptions> settings;
         private readonly Func<string,string,bool> login;
         private readonly Action<string> log;
-        private readonly McpTools tools = new McpTools();
+        private readonly McpTools tools;
+        private readonly McpSessions sessions;
         private readonly object gate = new object();
         private readonly HashSet<TcpClient> clients = new HashSet<TcpClient>();
         private TcpListener listener;
@@ -23,8 +24,8 @@ namespace RemoteControl
         private string credentials;
         internal volatile int Port;
         internal volatile string Note = "MCP 꺼짐";
-        internal McpHost(Func<McpOptions> read, Func<string,string,bool> checkLogin, Action<string> logger)
-        { settings=read; login=checkLogin; log=logger; }
+        internal McpHost(Func<McpOptions> read, Func<string,string,bool> checkLogin, Action<string> logger, string sessionPath = null)
+        { settings=read; login=checkLogin; log=logger; sessions=new McpSessions(sessionPath); tools=new McpTools(sessionPath==null?null:Path.Combine(Path.GetDirectoryName(sessionPath),"transfer-state")); }
         internal void Start() { Sync(); poll=new Timer(delegate { Sync(); },null,2000,2000); }
         internal void Sync()
         {
@@ -33,7 +34,7 @@ namespace RemoteControl
                 if(stopped)return;
                 try {
                     McpOptions o=settings();
-                    if(credentials!=null&&credentials!=o.CredentialStamp)Auth.DropAll(); credentials=o.CredentialStamp;
+                    if(credentials!=null&&credentials!=o.CredentialStamp) { sessions.Clear(o.CredentialStamp); Auth.DropAll(); } credentials=o.CredentialStamp;
                     int want=o.Enabled?o.Port:0;
                     if(want==Port)return;
                     if(listener!=null)listener.Stop(); listener=null; Port=0;
@@ -79,13 +80,15 @@ namespace RemoteControl
                 if(value==null){Reply(stream,"400 Bad Request",new{error="Invalid login JSON"});return;}
                 string user=Json.Str(value,"user"), password=Json.Str(value,"password");
                 if(!login(user,password)){Auth.NoteFailure(ip);Reply(stream,"401 Unauthorized",new{error="Remote ID/PW가 맞지 않습니다."});return;}
-                Auth.NoteSuccess(ip);Session session=Auth.CreateSession(user,ip);
+                Auth.NoteSuccess(ip);Session session=sessions.Create(user,ip,options.CredentialStamp);
                 Reply(stream,"200 OK",new{ok=true,hostname=Environment.MachineName,version=MainForm.Version},"Set-Cookie: rcmcpid="+session.Token+"; Path=/; HttpOnly; SameSite=Strict\r\n");return;
             }
-            string token=Cookie(Server.Header(lines,"Cookie"),"rcmcpid"); Session authenticated=Auth.Find(token);
+            string token=Cookie(Server.Header(lines,"Cookie"),"rcmcpid"); Session authenticated=sessions.Find(token,options.CredentialStamp);
             if(authenticated==null||authenticated.Ip!=ip){Reply(stream,"401 Unauthorized",new{error="Remote ID/PW 로그인이 필요합니다."});return;}
-            if(path=="/logout"&&method=="POST"){Auth.Drop(token);Reply(stream,"200 OK",new{ok=true});return;}
+            if(path=="/logout"&&method=="POST"){sessions.Drop(token,options.CredentialStamp);Reply(stream,"200 OK",new{ok=true});return;}
             if(path=="/upload"&&method=="POST") {Upload(stream,prefix,length,target,options);return;}
+            if(path=="/transfer-download"&&method=="GET")
+            {try{tools.Transfers.SendDownload(stream,Query(target,"id"),token,options,Server.Header(lines,"Range"));}catch(Exception ex){Reply(stream,"400 Bad Request",new{error=ex.Message});}return;}
             if(path=="/download"&&method=="GET")
             {
                 try { string file=McpPath.Check(Query(target,"path"),options);Files.Send(stream,lines,file,false); }
@@ -107,7 +110,7 @@ namespace RemoteControl
             {
                 case "initialize":
                     string protocol=Json.Str(args,"protocolVersion");if(Array.IndexOf(new[]{"2025-11-25","2025-06-18","2025-03-26","2024-11-05"},protocol)<0)protocol="2025-11-25";
-                    response=McpJson.Result(id,new{protocolVersion=protocol,capabilities=new{tools=new{listChanged=false}},serverInfo=new{name="RemoteControl LAN",version=MainForm.Version},instructions="Use pc_get_status to verify the remote hostname before changes. File paths are on the remote PC; pc_upload_file and pc_download_file are local bridge tools. Commands run with the remote agent's Windows rights. Keep output concise; use logs and screenshot to verify a deployment."});break;
+                    response=McpJson.Result(id,new{protocolVersion=protocol,capabilities=new{tools=new{listChanged=false}},serverInfo=new{name="RemoteControl LAN",version=MainForm.Version},instructions="Use pc_get_status to verify the remote hostname before changes. File paths are on the remote PC. File and folder transfers use pc_begin_upload, pc_write_upload_chunk, pc_finish_upload, pc_prepare_download and pc_read_download_chunk with SHA-256 validation. Commands run with the remote agent's Windows rights. Keep output concise; use logs and screenshot to verify a deployment."});break;
                 case "ping":response=McpJson.Result(id,new{});break;
                 case "tools/list":response=McpJson.Result(id,new{tools=McpTools.List()});break;
                 case "resources/list":response=McpJson.Result(id,new{resources=new object[0]});break;
@@ -115,7 +118,7 @@ namespace RemoteControl
                 case "prompts/list":response=McpJson.Result(id,new{prompts=new object[0]});break;
                 case "tools/call":
                     string name=Json.Str(args,"name");var clock=System.Diagnostics.Stopwatch.StartNew();bool success=false;
-                    try {response=McpJson.Result(id,tools.Call(name,McpJson.Obj(args,"arguments"),options,authenticated.User));success=true;}
+                    try {response=McpJson.Result(id,tools.Call(name,McpJson.Obj(args,"arguments"),options,authenticated.User,authenticated.Token));success=true;}
                     catch(Exception ex){response=McpJson.Result(id,McpJson.ToolError(ex.Message));}
                     log("MCP "+McpJson.Write(new{tool=name,user=authenticated.User,ip=ip,ok=success,ms=clock.ElapsedMilliseconds}));break;
                 default:response=McpJson.Error(id,-32601,"Method not found");break;

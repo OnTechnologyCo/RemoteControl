@@ -22,7 +22,8 @@ namespace RemoteControlSetup
         private string directAddress;
         private int directPort;
         private int customPort=WebMcp.DefaultPort;
-        private int tailscalePort,tailscaleCustomPort=8443,previousMode=-1;
+        private int tailscalePort,tailscaleCustomPort=8443,previousMode=-1,tailscaleGateway,privateGateway;
+        private readonly Label gatewayTitle;
         private readonly Button certificate;
         private string certificatePath, privateKeyPath;
 
@@ -36,11 +37,11 @@ namespace RemoteControlSetup
                 : "원격제어 ID·비밀번호, 잠금 화면 제어 서비스, LAN MCP를 먼저 켜고 저장하세요. 공개 HTTPS 주소와 기본 포트(443) 또는 전용 포트를 선택하세요.",
                 Font=Ui.F(8,FontStyle.Regular), ForeColor=Ui.Sub}});
             string saved = WebMcp.ReadSetting("mcp_web_url", ""); Uri uri;
-            if(WebMcp.ReadSetting("mcp_web_mode","")=="tailscale")saved=WebMcp.ReadSetting("mcp_ddns_url","");
+            if(WebMcp.ReadSetting("mcp_web_mode","")=="tailscale"||WebMcp.ReadSetting("mcp_web_mode","")=="private")saved=WebMcp.ReadSetting("mcp_ddns_url","");
             if (Uri.TryCreate(saved, UriKind.Absolute, out uri)) saved = new UriBuilder(uri) {Port=-1}.Uri.GetLeftPart(UriPartial.Authority);
             directAddress=saved;directPort=WebMcp.PreferredPort();
             mode=new ComboBox{Name="WebConnectionMode",DropDownStyle=ComboBoxStyle.DropDownList,Font=Ui.F(9,FontStyle.Regular)};
-            mode.Items.AddRange(new object[]{"주소 직접 입력 (자동 변경 안 함)","Tailscale 주소 자동 연결"});
+            mode.Items.AddRange(new object[]{"주소 직접 입력 (자동 변경 안 함)","Tailscale 주소 자동 연결","프라이빗 터널 주소 자동 연결"});
             row(new Control[]{mode});
             addressTitle=new Label {Text="DDNS 주소 (https://내주소)",Font=Ui.F(8,FontStyle.Regular),ForeColor=Ui.Sub};
             row(new Control[] {addressTitle});
@@ -64,15 +65,22 @@ namespace RemoteControlSetup
             help=new Label {Font=Ui.F(8,FontStyle.Regular),ForeColor=Ui.Sub};
             row(new Control[] {certificate,help});
             int local; if(!int.TryParse(WebMcp.ReadSetting("mcp_ts_gateway","59335"),out local)||local<1024||local>65535)local=59335;
+            tailscaleGateway=local;
+            if(!int.TryParse(WebMcp.ReadSetting("mcp_private_gateway","59336"),out privateGateway)||privateGateway<1024||privateGateway>65535)privateGateway=59336;
+            gatewayTitle=new Label{Text="자동 연결 로컬 중계 포트",Font=Ui.F(8,FontStyle.Regular),ForeColor=Ui.Sub};
             gateway=new NumericUpDown{Name="TailscaleGatewayPort",Minimum=1024,Maximum=65535,Value=local,Font=Ui.F(9,FontStyle.Regular),BackColor=Ui.Input,ForeColor=Color.White};
-            row(new Control[]{new Label{Text="Tailscale 로컬 중계 포트",Font=Ui.F(8,FontStyle.Regular),ForeColor=Ui.Sub},gateway});
+            row(new Control[]{gatewayTitle,gateway});
             result=new Label{Name="GeneratedMcpAddress",Font=Ui.F(8,FontStyle.Regular),ForeColor=Ui.Cyan};row(new Control[]{result});
             if(!int.TryParse(WebMcp.ReadSetting("mcp_ts_port","443"),out tailscalePort)||(tailscalePort!=443&&tailscalePort!=8443&&tailscalePort!=10000))tailscalePort=443;
             if(tailscalePort!=443)tailscaleCustomPort=tailscalePort;
             mode.SelectedIndexChanged+=delegate{
                 changingPort=true;
-                if(mode.SelectedIndex==1){directAddress=address.Text;directPort=(int)port.Value;port.Value=tailscalePort;}
-                else{if(previousMode==1)tailscalePort=(int)port.Value;address.Text=directAddress;port.Value=WebMcp.IsHttpsPort(directPort)?directPort:WebMcp.DefaultPort;}
+                if(previousMode==0){directAddress=address.Text;directPort=(int)port.Value;}
+                if(previousMode==1){tailscalePort=(int)port.Value;tailscaleGateway=(int)gateway.Value;}
+                if(previousMode==2)privateGateway=(int)gateway.Value;
+                if(mode.SelectedIndex==1){port.Value=tailscalePort;gateway.Value=tailscaleGateway;}
+                else if(mode.SelectedIndex==2){port.Value=443;gateway.Value=privateGateway;}
+                else{address.Text=directAddress;port.Value=WebMcp.IsHttpsPort(directPort)?directPort:WebMcp.DefaultPort;}
                 defaultPort.Checked=port.Value==443;previousMode=mode.SelectedIndex;
                 changingPort=false;
                 SetBusy(busy);RefreshAddress();
@@ -88,10 +96,10 @@ namespace RemoteControlSetup
                 if(!changingPort){if(mode.SelectedIndex==1){if(port.Value==8443||port.Value==10000)tailscaleCustomPort=(int)port.Value;}else if(port.Value>=1024)customPort=(int)port.Value;changingPort=true;defaultPort.Checked=port.Value==443;changingPort=false;SetBusy(busy);}
                 RefreshAddress();
             };
-            address.TextChanged+=delegate{if(mode.SelectedIndex!=1)RefreshAddress();};
-            mode.SelectedIndex=WebMcp.ReadSetting("mcp_web_mode","")=="tailscale"?1:0;
+            address.TextChanged+=delegate{if(mode.SelectedIndex==0)RefreshAddress();};
+            mode.SelectedIndex=WebMcp.ReadSetting("mcp_web_mode","")=="private"?2:WebMcp.ReadSetting("mcp_web_mode","")=="tailscale"?1:0;
             enabled.CheckedChanged += delegate { SetBusy(false); };
-            timer.Interval=1000;timer.Tick+=delegate{if(mode.SelectedIndex==1)RefreshAddress();};timer.Start();address.Disposed+=delegate{timer.Dispose();};
+            timer.Interval=1000;timer.Tick+=delegate{if(mode.SelectedIndex>0)RefreshAddress();};timer.Start();address.Disposed+=delegate{timer.Dispose();};
             SetBusy(false);
         }
         internal void Apply(Options options)
@@ -99,8 +107,8 @@ namespace RemoteControlSetup
             options.WebMcp=enabled.Checked;
             options.WebUrl=null; options.CertificatePath=null; options.PrivateKeyPath=null;
             if (!options.WebMcp) return;
-            options.WebTailscale=mode.SelectedIndex==1;
-            if(options.WebTailscale){options.WebPublicPort=(int)port.Value;options.WebGatewayPort=(int)gateway.Value;return;}
+            options.WebTailscale=mode.SelectedIndex==1;options.WebPrivate=mode.SelectedIndex==2;
+            if(options.WebTailscale||options.WebPrivate){options.WebPublicPort=(int)port.Value;options.WebGatewayPort=(int)gateway.Value;return;}
             options.WebUrl=WebMcp.WithPort(address.Text.Trim(),(int)port.Value);
             options.CertificatePath=certificatePath; options.PrivateKeyPath=privateKeyPath;
         }
@@ -108,18 +116,20 @@ namespace RemoteControlSetup
         {
             this.busy=busy;
             enabled.Enabled=!busy;
-            bool on=!busy && enabled.Checked,ts=mode.SelectedIndex==1;
-            mode.Enabled=on;port.Enabled=on&&!defaultPort.Checked;defaultPort.Enabled=on;gateway.Enabled=on&&ts;
-            address.Enabled=on;address.ReadOnly=ts;certificate.Enabled=on&&!ts;
-            addressTitle.Text=ts?"Tailscale 주소 (연결되면 자동 입력)":"DDNS 주소 (https://내주소)";
-            help.Text=ts?"기본 443에서 화면과 MCP를 함께 연결합니다.\n별도 포트는 8443 또는 10000을 선택하세요.":"기존 인증서는 자동 사용 · 새 인증서는 버튼으로 선택\n443 사용 시 기존 서비스와 충돌하는지 적용 전에 검사합니다.";
+            bool on=!busy && enabled.Checked,ts=mode.SelectedIndex==1,pr=mode.SelectedIndex==2,auto=ts||pr;
+            mode.Enabled=on;port.Enabled=on&&!pr&&!defaultPort.Checked;defaultPort.Enabled=on&&!pr;gateway.Enabled=on&&auto;
+            address.Enabled=on;address.ReadOnly=auto;certificate.Enabled=on&&!auto;
+            gatewayTitle.Text=pr?"프라이빗 터널 로컬 중계 포트":"Tailscale 로컬 중계 포트";
+            addressTitle.Text=pr?"프라이빗 발급 주소 (연결되면 자동 입력)":ts?"Tailscale 주소 (연결되면 자동 입력)":"DDNS 주소 (https://내주소)";
+            help.Text=pr?"발급 HTTPS 주소 하나로 화면·MCP·파일 전송을 연결합니다.\n외부망 설정에서 프라이빗 터널을 켜세요. 인증서·공유기 설정은 필요 없습니다.":ts?"기본 443에서 화면과 MCP를 함께 연결합니다.\n별도 포트는 8443 또는 10000을 선택하세요.":"기존 인증서는 자동 사용 · 새 인증서는 버튼으로 선택\n443 사용 시 기존 서비스와 충돌하는지 적용 전에 검사합니다.";
         }
         private void RefreshAddress()
         {
-            if(mode.SelectedIndex==1){string current=WebMcp.ReadTailscaleUrl();address.Text=current;int p=(int)port.Value;if(p!=443&&p!=8443&&p!=10000){result.Text="Tailscale 공개 포트는 443, 8443, 10000 중 선택하세요.";return;}result.Text=current.Length==0?"Tailscale 연결 대기 · 주소가 생성되면 자동 반영하고 접속 확인 후 텔레그램으로 알립니다.":WebMcp.WithPort(current,p)+"/mcp · 적용 후 접속 확인 시 텔레그램으로 알립니다.";}
+            if(mode.SelectedIndex==2){string current=WebMcp.ReadPrivateUrl();address.Text=current;result.Text=current.Length==0?"프라이빗 터널 연결 대기 · 발급 주소를 MCP에 자동 반영합니다.":current+"/mcp · 재연결로 주소가 바뀌면 앱에서 새 주소로 로그인하세요.";}
+            else if(mode.SelectedIndex==1){string current=WebMcp.ReadTailscaleUrl();address.Text=current;int p=(int)port.Value;if(p!=443&&p!=8443&&p!=10000){result.Text="Tailscale 공개 포트는 443, 8443, 10000 중 선택하세요.";return;}result.Text=current.Length==0?"Tailscale 연결 대기 · 주소가 생성되면 자동 반영하고 접속 확인 후 텔레그램으로 알립니다.":WebMcp.WithPort(current,p)+"/mcp · 적용 후 접속 확인 시 텔레그램으로 알립니다.";}
             else {
                 string preview="";try{preview="MCP 주소: "+WebMcp.WithPort(address.Text.Trim(),(int)port.Value)+"/mcp\n";}catch{}
-                result.Text=preview+"직접 입력 주소·포트는 Tailscale을 사용해도 자동 변경하지 않습니다.";
+                result.Text=preview+"직접 입력 주소·포트는 화면 터널을 사용해도 자동 변경하지 않습니다.";
             }
         }
     }

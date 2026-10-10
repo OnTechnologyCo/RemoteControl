@@ -14,6 +14,8 @@ namespace RemoteControl
     internal sealed class McpTools : IDisposable
     {
         private readonly McpProcesses processes = new McpProcesses();
+        internal readonly McpTransfers Transfers;
+        internal McpTools(string transferDirectory = null) { Transfers = new McpTransfers(transferDirectory); }
         internal static readonly object FileGate = new object();
         private static object Str(string description) { return new { type = "string", description = description }; }
         private static object Num(string description) { return new { type = "integer", description = description, minimum = 0 }; }
@@ -43,11 +45,19 @@ namespace RemoteControl
                 Tool("stop_process", "Stop only the selected MCP-owned process job and descendants. Does not kill programs by name.",false,new[]{"session_id"},"session_id",Str("Owned job ID")),
                 Tool("list_processes", "Inspect current PC processes, PID, memory and available window titles. Read-only.",true,none),
                 Tool("read_event_log", "Read recent Windows Application or System events for diagnosis.",true,none,"log",Str("Application or System"),"limit",Num("1..100, default 20")),
-                Tool("capture_screen", "Capture the selected remote monitor to verify the running program. Returns a JPEG and original/display dimensions. Does not change resolution or inject input.",true,none,"monitor",Num("Zero-based monitor index"),"max_width",Num("320..3840, default 1920"))
+                Tool("capture_screen", "Capture the selected remote monitor to verify the running program. Returns a JPEG and original/display dimensions. Does not change resolution or inject input.",true,none,"monitor",Num("Zero-based monitor index"),"max_width",Num("320..3840, default 1920")),
+                Tool("begin_upload", "Begin resumable binary file or folder upload. Supply each file size and complete SHA-256. Files remain temporary until finish. Folder target must be new.",false,new[]{"path","kind","files"},"path",Str("Remote target file or new folder"),"kind",Str("file or folder"),"files",new{type="array",items=new{type="object",properties=new{path=Str("Relative path; empty for a single file"),size=Num("File bytes, at most 4GiB"),sha256=Str("Complete file SHA-256"),directory=Flag("Empty directory entry")},required=new[]{"path","size"},additionalProperties=false}},"expected_sha256",Str("Current target hash required to replace a file"),"request_id",Str("Optional 32 lowercase hex ID; retain to recover a lost begin response")),
+                Tool("write_upload_chunk", "Write up to 256KiB at the confirmed next offset. Verify SHA-256. After an ambiguous failure query transfer status before continuing.",false,new[]{"transfer_id","offset","data_base64","sha256"},"transfer_id",Str("Upload ID"),"relative_path",Str("Manifest file path; empty for single file"),"offset",Num("Confirmed byte offset"),"data_base64",Str("Base64 encoded chunk"),"sha256",Str("Chunk SHA-256")),
+                Tool("finish_upload", "Verify every complete SHA-256 and commit the upload. Existing file replacement keeps a backup; folders are committed together.",false,new[]{"transfer_id"},"transfer_id",Str("Upload ID")),
+                Tool("get_transfer_status", "Read upload offsets or folder download preparation status. Authentication owns each transfer.",true,new[]{"transfer_id"},"transfer_id",Str("Transfer ID")),
+                Tool("cancel_transfer", "Cancel this connection's transfer and remove only its temporary data.",false,new[]{"transfer_id"},"transfer_id",Str("Transfer ID")),
+                Tool("prepare_download", "Prepare a binary file or folder ZIP for streamed or chunked download. Folder preparation is asynchronous; poll transfer status.",false,new[]{"path","kind"},"path",Str("Remote file or folder"),"kind",Str("file or folder")),
+                Tool("read_download_chunk", "Read up to 256KiB of a prepared file or folder ZIP. Verify chunk and complete SHA-256 when saving the bytes.",true,new[]{"transfer_id"},"transfer_id",Str("Prepared download ID"),"offset",Num("Byte offset"),"limit",Num("1..262144, default 262144"))
             };
         }
-        internal object Call(string name, Dictionary<string, object> a, McpOptions options, string user)
+        internal object Call(string name, Dictionary<string, object> a, McpOptions options, string user, string token = null)
         {
+            if(name=="pc_begin_upload"||name=="pc_write_upload_chunk"||name=="pc_finish_upload"||name=="pc_get_transfer_status"||name=="pc_cancel_transfer"||name=="pc_prepare_download"||name=="pc_read_download_chunk")return McpJson.Text(Transfers.Call(name,a,options,token));
             string path;
             switch (name)
             {

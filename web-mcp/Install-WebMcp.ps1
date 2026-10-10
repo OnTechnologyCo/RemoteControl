@@ -69,7 +69,7 @@ if($CheckOnly){Write-Output "웹 연결 사전 검사 완료: TCP $httpsPort, �
 $lanReady = $false
 for($n=0;$n -lt 15;$n++) { if(Get-NetTCPConnection -State Listen -LocalPort $LanPort -ErrorAction SilentlyContinue){$lanReady=$true;break}; Start-Sleep -Milliseconds 500 }
 if (-not $lanReady) { throw "원격제어의 LAN MCP $LanPort 포트를 먼저 켜세요." }
-foreach ($name in @('node.exe','caddy.exe','server.mjs','gateway.mjs','node_modules','package-lock.json')) { if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot $name))) { throw "배포 파일이 없습니다: $name" } }
+foreach ($name in @('node.exe','caddy.exe','server.mjs','gateway.mjs','auth-state.mjs','transfers.mjs','transfer-client.mjs','node_modules','package-lock.json')) { if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot $name))) { throw "배포 파일이 없습니다: $name" } }
 # 새 폴더만 만들고 먼저 ACL을 잠근다. 인터넷 요청을 받는 중계는 LocalService로 실행한다.
 function New-PrivateDirectory([string]$path,[bool]$writable) {
     [void][IO.Directory]::CreateDirectory($path)
@@ -104,7 +104,7 @@ if(Test-Path -LiteralPath $modules) {
     if(Get-ChildItem -LiteralPath $modules -Recurse -Force | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }){throw '의존성 폴더 안에 연결 경로가 있습니다.'}
     Remove-Item -LiteralPath $resolved -Recurse -Force
 }
-foreach ($name in @('node.exe','caddy.exe','server.mjs','gateway.mjs','node_modules','package.json','package-lock.json','WebMcpConfig.ps1','check-certificate.mjs','Disable-WebMcp.ps1','Export-Plugin.ps1','README.md','THIRD-PARTY.txt','NODE-LICENSE.txt','CADDY-LICENSE.txt')) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $appDir -Recurse }
+foreach ($name in @('node.exe','caddy.exe','server.mjs','gateway.mjs','auth-state.mjs','transfers.mjs','transfer-client.mjs','node_modules','package.json','package-lock.json','WebMcpConfig.ps1','check-certificate.mjs','Disable-WebMcp.ps1','Export-Plugin.ps1','README.md','THIRD-PARTY.txt','NODE-LICENSE.txt','CADDY-LICENSE.txt')) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $appDir -Recurse }
 $raw = New-Object byte[] 32
 $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
 try { $rng.GetBytes($raw) } finally { $rng.Dispose() }
