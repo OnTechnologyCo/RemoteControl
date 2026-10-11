@@ -13,8 +13,8 @@ namespace RemoteControlSetup
     internal static class WebMcp
     {
         internal const string PluginName = "RemoteControl_WebPlugin.zip";
-        internal const int DefaultPort = 59334;
-        internal const string DefaultUrl = "https://najhna.dyndns.org:59334";
+        internal const int DefaultPort = 443;
+        internal const string DefaultUrl = "https://najhna.dyndns.org";
         private static readonly UTF8Encoding Utf8 = new UTF8Encoding(false);
 
         internal static string ReadSetting(string key, string fallback)
@@ -33,7 +33,7 @@ namespace RemoteControlSetup
             Uri uri;
             if (!Uri.TryCreate(text, UriKind.Absolute, out uri) || uri.Scheme != "https" || uri.HostNameType != UriHostNameType.Dns ||
                 (!uri.IsDefaultPort && uri.Port < 1024) || uri.AbsolutePath != "/" || uri.Query.Length > 0 || uri.Fragment.Length > 0 || uri.UserInfo.Length > 0)
-                throw new ArgumentException("웹 연결 주소는 경로 없는 https://DDNS주소:포트 형식으로 입력하세요.");
+                throw new ArgumentException("웹 연결 주소는 경로 없는 https://DDNS주소 형식으로 입력하세요. 기본 HTTPS 포트는 443입니다.");
             return uri.GetLeftPart(UriPartial.Authority);
         }
         internal static int PreferredPort()
@@ -207,7 +207,7 @@ namespace RemoteControlSetup
                 }
             }catch{}return "";
         }
-        private static void SaveSettings(string path, Dictionary<string,string> changes)
+        internal static void SaveSettings(string path, Dictionary<string,string> changes)
         {
             // 본체 Config.SetMany와 같은 잠금으로 최신 설정에 URL 한 항목만 합친다.
             FileStream lease = null; DateTime until = DateTime.UtcNow.AddSeconds(3);
@@ -243,7 +243,7 @@ namespace RemoteControlSetup
             string script = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "RemoteControlWebMcp", "Disable-WebMcp.ps1");
             if (File.Exists(script)) RunScript(script, "", say);
         }
-        private static void RunScript(string script, string arguments, Installer.Say say)
+        internal static void RunScript(string script, string arguments, Installer.Say say)
         {
             var psi = new ProcessStartInfo { FileName = Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"),
                 Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"" + script + "\"" + arguments,

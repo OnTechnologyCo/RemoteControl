@@ -1,6 +1,6 @@
 {
   "name": "remotecontrol-web-mcp",
-  "version": "1.8.14",
+  "version": "1.8.15",
   "private": true,
   "type": "module",
   "engines": { "node": ">=24.14.0" },

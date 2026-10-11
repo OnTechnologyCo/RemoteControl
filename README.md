@@ -1,3 +1,7 @@
+## v1.8.15 LAN IP / 폐쇄망 WebMCP
+
+**LLM / MCP 설정 → LAN / 내부망 설정**에서 대상 PC의 IP와 허용 대역을 지정하면 기본 443의 `https://LAN_IP/mcp`로 연결합니다. 공개 CA를 클라이언트 PC에 최초 1회 등록한 뒤 로컬 MCP 클라이언트에서 기존 ID·비밀번호로 로그인합니다. 인터넷·DDNS·터널 없이 서버 인증과 파일 전송을 사용하며, 외부 WebMCP와 같은 443을 사용하면 소유 HTTPS 서비스에서 도메인/IP를 분기합니다. [사용법](docs/webmcp-lan-offline.md). 클라우드 ChatGPT/Claude의 사설 IP 직접 연결 또는 오프라인 모델 실행을 의미하지 않습니다.
+
 # RemoteControl v1.8.14
 
 [한국어](README.md) | [English](README.en.md)

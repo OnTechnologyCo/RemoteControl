@@ -1,4 +1,4 @@
-﻿# 설치는 관리자 PowerShell에서 명시적으로 실행한다. 빌드에서는 이 파일을 실행하지 않는다.
+# 설치는 관리자 PowerShell에서 명시적으로 실행한다. 빌드에서는 이 파일을 실행하지 않는다.
 [CmdletBinding()]
 param(
     [Parameter(Mandatory=$true)][string]$PublicUrl,
@@ -12,6 +12,7 @@ $ErrorActionPreference = 'Stop'
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
 if (-not (New-Object Security.Principal.WindowsPrincipal($identity)).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw '관리자 PowerShell에서 실행하세요.' }
 . (Join-Path $PSScriptRoot 'WebMcpConfig.ps1')
+. (Join-Path $PSScriptRoot 'LanWebMcpConfig.ps1')
 $uri = Get-WebMcpUri $PublicUrl $LanPort $GatewayPort
 $httpsPort = $uri.Port
 $PublicUrl = $uri.GetLeftPart([UriPartial]::Authority)
@@ -33,12 +34,14 @@ $expectedService = '"' + (Join-Path $appDir 'caddy.exe') + '" run --config "' + 
 if($service -and $service.PathName -cne $expectedService){throw 'HTTPS 서비스의 실행 경로가 다릅니다.'}
 $expectedArguments = '"{0}" "{1}"' -f (Join-Path $appDir 'server.mjs'),(Join-Path $stateDir 'gateway.json')
 if($task -and ($task.Actions.Count -ne 1 -or $task.Actions[0].Execute -ine (Join-Path $appDir 'node.exe') -or $task.Actions[0].Arguments -cne $expectedArguments)){throw '웹 MCP 예약 작업의 실행 경로가 다릅니다.'}
+$lanWeb=Get-LanWebMcpActive $httpsPort
 # 인증서와 포트 충돌부터 검사한다. 여기까지는 실행 중인 서비스를 멈추지 않는다.
 foreach($port in @($httpsPort,$GatewayPort)) {
     foreach($listener in Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue) {
         $process=Get-CimInstance Win32_Process -Filter ("ProcessId="+$listener.OwningProcess)
         $ours=($service -and $listener.OwningProcess -eq $service.ProcessId) -or
             ($task -and $process.ExecutablePath -ieq (Join-Path $appDir 'node.exe') -and $process.CommandLine -like ('*'+$expectedArguments))
+        if($lanWeb -and $port -eq $httpsPort -and $process.ExecutablePath -ieq (Join-Path $lanWeb.app 'caddy.exe')){$ours=$true}
         if(-not $ours){throw "TCP $port 포트는 다른 프로그램이 사용 중입니다. 다른 포트를 지정하세요. 기존 서비스는 중지하지 않았습니다."}
     }
 }
@@ -66,10 +69,11 @@ foreach($rule in Get-NetFirewallRule -Name 'RemoteControlWebMcp-TCP-*' -ErrorAct
     if(($rule|Get-NetFirewallApplicationFilter).Program -ine (Join-Path $appDir 'caddy.exe')){throw '웹 MCP 방화벽 규칙의 프로그램이 다릅니다. 기존 서비스는 중지하지 않았습니다.'}
 }
 if($CheckOnly){Write-Output "웹 연결 사전 검사 완료: TCP $httpsPort, 인증서 만료 $($certificate.ValidUntil)";return}
+if($lanWeb){Stop-ScheduledTask -TaskName 'RemoteControlLanWebMcpHttps'}
 $lanReady = $false
 for($n=0;$n -lt 15;$n++) { if(Get-NetTCPConnection -State Listen -LocalPort $LanPort -ErrorAction SilentlyContinue){$lanReady=$true;break}; Start-Sleep -Milliseconds 500 }
 if (-not $lanReady) { throw "원격제어의 LAN MCP $LanPort 포트를 먼저 켜세요." }
-foreach ($name in @('node.exe','caddy.exe','server.mjs','gateway.mjs','auth-state.mjs','transfers.mjs','transfer-client.mjs','node_modules','package-lock.json')) { if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot $name))) { throw "배포 파일이 없습니다: $name" } }
+foreach ($name in @('node.exe','caddy.exe','server.mjs','gateway.mjs','LanWebMcpConfig.ps1','auth-state.mjs','transfers.mjs','transfer-client.mjs','node_modules','package-lock.json')) { if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot $name))) { throw "배포 파일이 없습니다: $name" } }
 # 새 폴더만 만들고 먼저 ACL을 잠근다. 인터넷 요청을 받는 중계는 LocalService로 실행한다.
 function New-PrivateDirectory([string]$path,[bool]$writable) {
     [void][IO.Directory]::CreateDirectory($path)
@@ -104,7 +108,7 @@ if(Test-Path -LiteralPath $modules) {
     if(Get-ChildItem -LiteralPath $modules -Recurse -Force | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }){throw '의존성 폴더 안에 연결 경로가 있습니다.'}
     Remove-Item -LiteralPath $resolved -Recurse -Force
 }
-foreach ($name in @('node.exe','caddy.exe','server.mjs','gateway.mjs','auth-state.mjs','transfers.mjs','transfer-client.mjs','node_modules','package.json','package-lock.json','WebMcpConfig.ps1','check-certificate.mjs','Disable-WebMcp.ps1','Export-Plugin.ps1','README.md','THIRD-PARTY.txt','NODE-LICENSE.txt','CADDY-LICENSE.txt')) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $appDir -Recurse }
+foreach ($name in @('node.exe','caddy.exe','server.mjs','gateway.mjs','LanWebMcpConfig.ps1','auth-state.mjs','transfers.mjs','transfer-client.mjs','node_modules','package.json','package-lock.json','WebMcpConfig.ps1','check-certificate.mjs','Disable-WebMcp.ps1','Export-Plugin.ps1','README.md','THIRD-PARTY.txt','NODE-LICENSE.txt','CADDY-LICENSE.txt')) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $appDir -Recurse }
 $raw = New-Object byte[] 32
 $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
 try { $rng.GetBytes($raw) } finally { $rng.Dispose() }
@@ -146,6 +150,11 @@ foreach($rule in Get-NetFirewallRule -Name 'RemoteControlWebMcp-TCP-*' -ErrorAct
 }
 foreach($port in $firewallPorts){New-NetFirewallRule -Name "RemoteControlWebMcp-TCP-$port" -DisplayName "RemoteControl Web TCP $port" -Direction Inbound -Action Allow -Protocol TCP -LocalPort $port -Program (Join-Path $appDir 'caddy.exe') | Out-Null}
 Start-ScheduledTask -TaskName $taskName
+if($lanWeb){
+    $lanWeb.active.shared=$true
+    [IO.File]::WriteAllText($lanWeb.file,($lanWeb.active|ConvertTo-Json),$utf8)
+    Get-NetFirewallRule -Name 'RemoteControlLanWebMcp-TCP' -ErrorAction SilentlyContinue|Get-NetFirewallApplicationFilter|Set-NetFirewallApplicationFilter -Program (Join-Path $appDir 'caddy.exe')|Out-Null
+}
 Start-Service -Name $serviceName
 for($n=0;$n -lt 20;$n++) { if(Get-NetTCPConnection -State Listen -LocalPort $GatewayPort -ErrorAction SilentlyContinue){break}; Start-Sleep -Milliseconds 500 }
 if(-not(Get-NetTCPConnection -State Listen -LocalPort $GatewayPort -ErrorAction SilentlyContinue)){throw '웹 MCP 중계가 시작되지 않았습니다.'}

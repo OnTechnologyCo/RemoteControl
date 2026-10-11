@@ -21,7 +21,7 @@ namespace RemoteControlSetup
         private bool busy,changingPort;
         private string directAddress;
         private int directPort;
-        private int customPort=WebMcp.DefaultPort;
+        private int customPort=59334;
         private int tailscalePort,tailscaleCustomPort=8443,previousMode=-1,tailscaleGateway,privateGateway;
         private readonly Label gatewayTitle;
         private readonly Button certificate;

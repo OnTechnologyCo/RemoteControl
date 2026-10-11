@@ -22,6 +22,33 @@ const CALLBACKS = new Map([...CLIENTS.values()].map(client => [client.callback, 
 const SCOPE = 'remotecontrol';
 const COOKIE = '__Host-rc-connect';
 const minute = 60000;
+// LAN OAuth는 클라이언트 PC의 루프백 콜백만 허용하며 인터넷 문서를 읽지 않는다.
+export function callbackName(uri, lan = false) {
+  if (!lan) return CALLBACKS.get(uri);
+  try {
+    const u = new URL(uri);
+    if (u.protocol !== 'http:' || !['127.0.0.1','localhost','[::1]'].includes(u.hostname) || !u.port || Number(u.port) < 1024 || u.username || u.password || u.hash || u.search) return undefined;
+    return '로컬 MCP 클라이언트';
+  } catch { return undefined; }
+}
+export function parseNetworks(value) {
+  if (typeof value !== 'string' || value.length > 2048) throw Error('LAN 허용 IPv4 대역이 필요합니다.');
+  const rows = value.split(',').map(v => v.trim());
+  if (!rows.length || rows.length > 32) throw Error('LAN 허용 대역은 1~32개만 지정하세요.');
+  return rows.map(row => {
+    const parts = row.split('/'), prefix = parts.length === 1 ? 32 : Number(parts[1]);
+    if (parts.length > 2 || isIP(parts[0]) !== 4 || !Number.isInteger(prefix) || prefix < 8 || prefix > 32 || (parts.length === 2 && !/^\d{1,2}$/.test(parts[1]))) throw Error('허용 대역은 IPv4 또는 IPv4/8~32 형식이어야 합니다.');
+    const address = parts[0].split('.').reduce((v,n) => ((v << 8) | Number(n)) >>> 0, 0);
+    const mask = (0xffffffff << (32-prefix)) >>> 0;
+    return {address:(address & mask) >>> 0, mask};
+  });
+}
+export function networkAllows(ip, networks) {
+  if (ip?.startsWith('::ffff:')) ip = ip.slice(7);
+  if (isIP(ip || '') !== 4) return false;
+  const address = ip.split('.').reduce((v,n) => ((v << 8) | Number(n)) >>> 0, 0);
+  return networks.some(n => ((address & n.mask) >>> 0) === n.address);
+}
 const random = () => randomBytes(32).toString('base64url');
 const equal = (a, b) => typeof a === 'string' && typeof b === 'string' && Buffer.byteLength(a) === Buffer.byteLength(b) && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 const html = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -29,9 +56,10 @@ const html = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'
 export function validateConfig(value) {
   const c = { ...value };
   const u = new URL(c.publicUrl);
-  if (u.protocol !== 'https:' || u.pathname !== '/' || u.search || u.hash || u.username || u.password || isIP(u.hostname))
+  if (u.protocol !== 'https:' || u.pathname !== '/' || u.search || u.hash || u.username || u.password || (c.mode === 'lan' ? isIP(u.hostname) !== 4 : isIP(u.hostname)))
     throw Error('publicUrl에는 경로 없는 HTTPS DDNS 주소를 지정하세요.');
   c.publicUrl = u.origin;
+  if (c.mode === 'lan') c.networks = parseNetworks(c.allowedNetworks);
   for (const k of ['listenPort', 'lanPort']) if (!Number.isInteger(c[k]) || c[k] < 1024 || c[k] > 65535) throw Error(k + ': 1024~65535 포트가 필요합니다.');
   if (c.lanPort === c.listenPort) throw Error('LAN MCP와 웹 중계 포트는 달라야 합니다.');
   if (!/^[A-Za-z0-9_-]{43}$/.test(c.proxyKey)) throw Error('설치 시 생성한 프록시 키가 필요합니다.');
@@ -67,13 +95,15 @@ async function getClientMetadata(id) {
 }
 
 class Clients {
-  constructor(directory, metadata) {
+  constructor(directory, metadata, lan) {
+    this.lan = lan;
     this.file = join(directory, 'clients.json'); this.metadata = metadata;
     this.cache = new Map(); this.pending = new Map();
     this.clients = new Map(existsSync(this.file) ? JSON.parse(readFileSync(this.file, 'utf8')).map(c => [c.client_id, c]) : []);
     if (this.clients.size > 128) throw Error('Too many OAuth clients');
   }
   async getClient(id) {
+    if (this.lan) { const client = this.clients.get(id); return client && client.redirect_uris?.length === 1 && callbackName(client.redirect_uris[0], true) ? client : undefined; }
     const known = CLIENTS.get(id);
     if (!known) return this.clients.get(id);
     const cached = this.cache.get(id);
@@ -91,13 +121,13 @@ class Clients {
     return this.pending.get(id);
   }
   async registerClient(client) {
-    if (!Array.isArray(client.redirect_uris) || client.redirect_uris.length !== 1 || !CALLBACKS.has(client.redirect_uris[0]) ||
+    if (!Array.isArray(client.redirect_uris) || client.redirect_uris.length !== 1 || !callbackName(client.redirect_uris[0], this.lan) ||
       !['none','client_secret_post'].includes(client.token_endpoint_auth_method || 'client_secret_post') ||
       client.grant_types?.some(g => !['authorization_code','refresh_token'].includes(g)) ||
       client.response_types?.some(r => r !== 'code')) throw new InvalidClientMetadataError('Supported callback and authorization_code flow required');
     if (this.clients.size >= 128) throw new TemporarilyUnavailableError('OAuth client registration limit reached');
     // DCR 이름은 누구나 정할 수 있어 로그인 화면의 신원 표시로 신뢰하지 않는다.
-    const saved = { ...client, client_name: CALLBACKS.get(client.redirect_uris[0]), client_id: random(), client_id_issued_at: Math.floor(Date.now()/1000) };
+    const saved = { ...client, client_name: callbackName(client.redirect_uris[0], this.lan), client_id: random(), client_id_issued_at: Math.floor(Date.now()/1000) };
     const next = [...this.clients.values(), saved];
     writeFileSync(this.file + '.tmp', JSON.stringify(next), { mode: 0o600 });
     renameSync(this.file + '.tmp', this.file); this.clients.set(saved.client_id, saved);
@@ -109,7 +139,7 @@ class Provider {
   constructor(config, directory, upstream, metadata, now) {
     this.config = config; this.upstream = upstream; this.now = now;
     this.issuer = config.publicUrl + '/'; this.resource = config.publicUrl + '/mcp';
-    this.clientsStore = new Clients(directory, metadata);
+    this.clientsStore = new Clients(directory, metadata, config.mode === 'lan');
     this.pending = new Map(); this.codes = new Map(); this.access = new Map(); this.refresh = new Map(); this.grants = new Set();
     this.state = new AuthState(directory, config.proxyKey, this.issuer);
     this.restore();
@@ -154,7 +184,7 @@ class Provider {
     const transaction = random(), csrf = random();
     this.pending.set(transaction, { ...params, clientId: client.client_id, csrf, expires: this.now() + 10 * minute });
     res.cookie(COOKIE, transaction, { httpOnly: true, secure: true, sameSite: 'lax', path: '/', maxAge: 10 * minute });
-    res.type('html').send(loginPage(csrf, this.config.publicUrl, CALLBACKS.get(params.redirectUri)));
+    res.type('html').send(loginPage(csrf, this.config.publicUrl, callbackName(params.redirectUri, this.config.mode === 'lan')));
   }
   async login(req, res) {
     this.sweep();
@@ -167,7 +197,7 @@ class Provider {
     res.clearCookie(COOKIE, { httpOnly: true, secure: true, sameSite: 'lax', path: '/' });
     const redirect = new URL(pending.redirectUri);
     redirect.searchParams.set('state', pending.state); redirect.searchParams.set('iss', this.issuer);
-    if (req.body.decision !== 'allow') { redirect.searchParams.set('error', 'access_denied'); return returnToClient(res, redirect, false); }
+    if (req.body.decision !== 'allow') { redirect.searchParams.set('error', 'access_denied'); return returnToClient(res, redirect, false, this.config.mode === 'lan'); }
     if (this.grants.size >= 64) return res.status(503).type('text').send('연결 수가 많습니다. 잠시 후 다시 연결하세요.');
     const {user, password} = req.body;
     if (typeof user !== 'string' || typeof password !== 'string' || !user || !password || user.length > 128 || password.length > 1024)
@@ -180,10 +210,10 @@ class Provider {
     if (result.status !== 200) return res.status(result.status === 429 ? 429 : 401).type('text').send(result.status === 429 ? '로그인 시도가 반복되어 잠시 잠겼습니다. 잠시 후 사용 중인 앱에서 다시 연결하세요.' : '원격제어 아이디 또는 비밀번호가 맞지 않습니다. 사용 중인 앱에서 다시 연결하세요.');
     const cookie = result.headers['set-cookie']?.find(c => /^rcmcpid=[A-Za-z0-9_-]+;/.test(c))?.split(';')[0];
     if (!cookie) return res.status(502).type('text').send('원격제어 로그인 응답을 확인할 수 없습니다.');
-    const grant = { clientId: pending.clientId, clientName:CALLBACKS.get(pending.redirectUri), cookie, expires: Number.MAX_SAFE_INTEGER, revoked: false };
+    const grant = { clientId: pending.clientId, clientName:callbackName(pending.redirectUri, this.config.mode === 'lan'), cookie, expires: Number.MAX_SAFE_INTEGER, revoked: false };
     this.grants.add(grant);
     const code = random(); this.codes.set(code, { ...pending, grant, expires: this.now() + 5 * minute });
-    redirect.searchParams.set('code', code); returnToClient(res, redirect, true);
+    redirect.searchParams.set('code', code); returnToClient(res, redirect, true, this.config.mode === 'lan');
   }
   code(client, code) {
     const item = this.codes.get(code);
@@ -248,8 +278,9 @@ class Provider {
   close() { clearInterval(this.timer); for (const grant of this.grants) if (!grant.authorized) this.drop(grant); this.persist(); }
 }
 
-function returnToClient(res, redirect, allowed) {
-  const clientName = CALLBACKS.get(redirect.origin + redirect.pathname);
+function returnToClient(res, redirect, allowed, lan = false) {
+  const target = new URL(redirect); target.search = '';
+  const clientName = callbackName(target.href, lan);
   if (!clientName) throw Error('Unexpected OAuth callback');
   const nonce = random();
   // Commit a new document before leaving the site. A form's 303 redirect chain
@@ -262,7 +293,7 @@ function returnToClient(res, redirect, allowed) {
 }
 
 function loginPage(csrf, origin, clientName) {
-  if (!['ChatGPT','Claude'].includes(clientName)) throw Error('Unknown login client');
+  if (!['ChatGPT','Claude','로컬 MCP 클라이언트'].includes(clientName)) throw Error('Unknown login client');
   return `<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>원격제어 · ${clientName} 연결</title>
 <style>body{font:16px system-ui,sans-serif;background:#101a29;color:#eef3fa;margin:0;padding:32px 20px}main{max-width:430px;margin:5vh auto;background:#1b2a40;padding:32px;border-radius:16px}h1{font-size:25px}p{line-height:1.65;color:#ced9e8}label{display:block;margin-top:18px}input{box-sizing:border-box;width:100%;padding:12px;margin-top:7px;border:1px solid #8091ab;border-radius:7px;font:inherit}button{font:inherit;cursor:pointer;padding:12px 16px;border:0;border-radius:7px;margin:24px 8px 0 0;background:#73d9ee;color:#10202c}button[value=deny]{background:#384c66;color:white}small{overflow-wrap:anywhere;color:#b3c6df}</style>
 <main><small>${html(origin)}</small><h1>${clientName}에 원격제어 연결</h1><p>이 PC의 원격제어 아이디와 비밀번호를 입력하세요.</p><p>연결하면 ${clientName}가 MCP 설정에서 허용한 파일, 명령 실행, 화면 조회 기능을 사용합니다. 실행 권한은 대상 원격제어 프로그램의 권한을 따릅니다.</p>
@@ -273,7 +304,7 @@ export function createGateway(config, { directory, upstream, metadata = getClien
   const c = validateConfig(config), app = express();
   const provider = new Provider(c, directory, upstream || ((path, data) => lanRequest(c.lanPort, path, data)), metadata, now);
   const authOptions = { provider, issuerUrl: new URL(c.publicUrl), resourceServerUrl: new URL(provider.resource), scopesSupported: [SCOPE], resourceName: 'RemoteControl', clientRegistrationOptions: { clientSecretExpirySeconds: 0 } };
-  const oauth = { ...createOAuthMetadata(authOptions), client_id_metadata_document_supported: true, authorization_response_iss_parameter_supported: true };
+  const oauth = { ...createOAuthMetadata(authOptions), client_id_metadata_document_supported: c.mode !== 'lan', authorization_response_iss_parameter_supported: true };
   const resourceMetadata = { resource: provider.resource, authorization_servers: [provider.issuer], scopes_supported: [SCOPE], bearer_methods_supported: ['header'], resource_name: 'RemoteControl' };
   const challenge = `Bearer resource_metadata="${c.publicUrl}/.well-known/oauth-protected-resource", scope="${SCOPE}"`;
   app.disable('x-powered-by'); app.set('trust proxy', false); app.set('query parser', 'simple');
@@ -295,8 +326,9 @@ export function createGateway(config, { directory, upstream, metadata = getClien
       'Content-Security-Policy':`default-src 'none'; style-src 'unsafe-inline'; form-action 'self' ${[...CALLBACKS.keys()].join(' ')}; frame-ancestors 'none'; base-uri 'none'`});
     if (req.headers.host !== new URL(c.publicUrl).host || !equal(req.get('x-rc-proxy-key'), c.proxyKey) || req.get('x-forwarded-proto') !== 'https' || !isIP(req.get('x-rc-client-ip') || ''))
       return res.status(403).send('HTTPS proxy required');
+    if (c.mode === 'lan' && !networkAllows(req.get('x-rc-client-ip'), c.networks)) return res.status(403).send('LAN client network rejected');
     const origin = req.get('origin');
-    if (origin && ![c.publicUrl, 'https://chatgpt.com', 'https://claude.ai'].includes(origin)) return res.status(403).send('Origin rejected');
+    if (origin && !(c.mode === 'lan' ? [c.publicUrl] : [c.publicUrl, 'https://chatgpt.com', 'https://claude.ai']).includes(origin)) return res.status(403).send('Origin rejected');
     next();
   });
   // 헤더 위조로 키를 늘릴 수 없는 전역 제한을 먼저 적용한다.
@@ -306,12 +338,12 @@ export function createGateway(config, { directory, upstream, metadata = getClien
   app.use((req, res, next) => {
     // SDK가 만드는 성공/오류 리디렉션 모두 같은 issuer를 명시해야 ChatGPT의 고정 callback을 쓸 수 있다.
     const original = res.redirect.bind(res);
-    res.redirect = (status, url) => { if (url === undefined) {url = status;status = 302;} const target = new URL(url, c.publicUrl); if (CALLBACKS.has(target.origin + target.pathname)) target.searchParams.set('iss', provider.issuer); return original(status, target.href); };
+    res.redirect = (status, url) => { if (url === undefined) {url = status;status = 302;} const target = new URL(url, c.publicUrl); const callback = new URL(target); callback.search = ''; if (callbackName(callback.href, c.mode === 'lan')) target.searchParams.set('iss', provider.issuer); return original(status, target.href); };
     next();
   });
   app.get('/.well-known/oauth-authorization-server', (req,res)=>res.json(oauth));
   app.get(['/.well-known/oauth-protected-resource','/.well-known/oauth-protected-resource/mcp'], (req,res)=>res.json(resourceMetadata));
-  app.get('/', (req,res)=>res.type('text').send('RemoteControl · ChatGPT MCP 연결 주소: ' + provider.resource));
+  app.get('/', (req,res)=>res.type('text').send('RemoteControl · WebMCP 연결 주소: ' + provider.resource));
   app.post('/connect', rateLimit({windowMs:minute,limit:10,keyGenerator:()=> 'login',standardHeaders:true,legacyHeaders:false}), express.urlencoded({extended:false,limit:'8kb',parameterLimit:8}), (req,res,next)=>provider.login(req,res).catch(next));
   // OAuth 요청과 MCP 요청은 본문 제한이 다르다. 인증 경로에서 큰 JSON을 먼저 읽지 않는다.
   app.use(['/authorize','/token','/register','/revoke'], express.urlencoded({extended:false,limit:'16kb',parameterLimit:20}), express.json({limit:'16kb'}));

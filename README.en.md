@@ -1,3 +1,7 @@
+## v1.8.15 LAN IP and offline WebMCP
+
+Enable the independent LAN settings to connect a local MCP client to `https://LAN_IP/mcp` on HTTPS 443. Import the target PC public CA once, then authenticate with the existing RemoteControl credentials using DCR and PKCE. Server authentication and file transfers require no internet, DDNS, or tunnel. An owned external HTTPS service can share the same port by routing domain and IP hosts separately. Cloud ChatGPT/Claude cannot directly reach private LAN IPs or run offline. [LAN guide](docs/webmcp-lan-offline.md).
+
 # RemoteControl v1.8.14
 
 [한국어](README.md) | [English](README.en.md)

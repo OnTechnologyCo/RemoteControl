@@ -24,7 +24,7 @@ foreach($listener in Get-NetTCPConnection -State Listen -LocalPort $GatewayPort 
     $process=Get-CimInstance Win32_Process -Filter ("ProcessId="+$listener.OwningProcess)
     if(-not $task -or $process.ExecutablePath -ine $expectedExe -or $process.CommandLine -notlike ('*'+$expectedArgs)){throw "TCP $GatewayPort is already used by another program. No services stopped."}
 }
-foreach($name in @('node.exe','private-server.mjs','tailscale-server.mjs','gateway.mjs','auth-state.mjs','transfers.mjs','transfer-client.mjs','node_modules','package.json')){if(-not(Test-Path -LiteralPath (Join-Path $PSScriptRoot $name))){throw "Missing runtime package: $name"}}
+foreach($name in @('node.exe','private-server.mjs','tailscale-server.mjs','gateway.mjs','LanWebMcpConfig.ps1','auth-state.mjs','transfers.mjs','transfer-client.mjs','node_modules','package.json')){if(-not(Test-Path -LiteralPath (Join-Path $PSScriptRoot $name))){throw "Missing runtime package: $name"}}
 if($CheckOnly){'Private MCP preflight passed';return}
 function PrivateDirectory([string]$path,[bool]$writable){
     [void][IO.Directory]::CreateDirectory($path)
@@ -46,7 +46,7 @@ for($n=0;$n -lt 20;$n++){
 }
 if($owned.Count -gt 0){throw 'The owned Private MCP gateway did not stop; files were not replaced.'}
 @{product=$taskName;directory=$appDir}|ConvertTo-Json|Set-Content -LiteralPath $marker -Encoding UTF8
-foreach($name in @('node.exe','private-server.mjs','tailscale-server.mjs','gateway.mjs','auth-state.mjs','transfers.mjs','transfer-client.mjs','node_modules','package.json','package-lock.json','NODE-LICENSE.txt','Disable-PrivateMcp.ps1')){Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $appDir -Recurse -Force}
+foreach($name in @('node.exe','private-server.mjs','tailscale-server.mjs','gateway.mjs','LanWebMcpConfig.ps1','auth-state.mjs','transfers.mjs','transfer-client.mjs','node_modules','package.json','package-lock.json','NODE-LICENSE.txt','Disable-PrivateMcp.ps1')){Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $appDir -Recurse -Force}
 $configPath=Join-Path $stateDir 'gateway.json'
 $random=New-Object byte[] 32;$rng=[Security.Cryptography.RandomNumberGenerator]::Create()
 try{$rng.GetBytes($random)}finally{$rng.Dispose()}

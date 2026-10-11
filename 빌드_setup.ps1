@@ -1,4 +1,4 @@
-﻿# 사용법: 빌드_setup.ps1                       본체 + 설치 파일, 항상 dist에 생성
+# 사용법: 빌드_setup.ps1                       본체 + 설치 파일, 항상 dist에 생성
 #         빌드_setup.ps1 -IncludeTailscaleKey   기존 Tailscale 키·알림 설정 포함
 #         빌드_setup.ps1 -NoKey                기본 동작과 같음 (기존 명령 호환)
 [CmdletBinding()]
@@ -177,6 +177,8 @@ $args = @(
     (Join-Path $root "Setup.cs")
     (Join-Path $root "SetupLayout.cs")
     (Join-Path $root "SetupWebForm.cs")
+    (Join-Path $root "SetupLanMcp.cs")
+    (Join-Path $root "SetupLanForm.cs")
     (Join-Path $root "SetupVdd.cs")
     (Join-Path $root "SetupWebMcp.cs")
 ) + $presetArg + $vddArg

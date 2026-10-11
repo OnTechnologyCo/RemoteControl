@@ -1,5 +1,16 @@
 > GitHub 비공개 업로드 사본: 실제 텔레그램 봇 토큰은 제외했다. 현재 `Notify.BotToken`은 `REMOTE_CONTROL_TELEGRAM_BOT_TOKEN` 실행 환경 변수를 읽는다. 아래 소스 상수 방식과 PC 상태는 과거 기록이며, 기존 원본과 설치된 서비스를 변경한 것이 아니다.
 
+## LAN IP / 폐쇄망 WebMCP (v1.8.15)
+
+- `SetupLanMcp.cs`, `SetupLanForm.cs`는 독립 LAN 설정을 제공한다. `/lan-web-settings`는 본체 재설치 없이 적용한다.
+- 기본 HTTPS 443, 내부 loopback 중계 59338. `mcp_lan_*` 설정은 외부 `mcp_web_*`와 별개다. 접속 URL은 `https://LAN_IP/mcp`이며 기본 포트를 생략한다.
+- `web-mcp/Install-LanWebMcp.ps1`는 CA를 오프라인 생성하고 LocalService 예약 작업을 등록한다. 공개 CA만 클라이언트에 내보내며 개인 키·프록시 키·인증 상태는 보호된 폴더에 보존한다.
+- `gateway.mjs`의 `mode:lan`은 IPv4 IP HTTPS, 명시된 접속 CIDR, DCR + PKCE 및 클라이언트 loopback callback만 허용한다. 공식 클라우드 CIMD도 조회하지 않는다.
+- 외부 DDNS와 LAN이 443을 함께 쓰면 소유 HTTPS 서비스에서 SNI/Host를 분기한다. `LanWebMcpConfig.ps1`은 관리 블록만 합치고 제거한다. 외부 모드를 중지할 때 LAN HTTPS를 독립 작업으로 유지한다.
+- CA와 인증 키는 LAN 갱신에서 보존한다. 동일 실행 이미지는 덮어쓰지 않아 Windows 종료 직후 이미지 잠금을 피한다.
+- `test/lan.test.mjs`는 실제 NIC IP의 HTTPS, TLS 검증, 로컬 callback 브라우저 로그인, 공식 SDK, 파일 SHA-256, 재시작/갱신/해제를 검사한다. `bench/Test-LanWebInstall.ps1`는 OS 작업/방화벽/서비스 cmdlet을 fixture로 치환하고 실제 Node/Caddy 설치·갱신·공유·중지를 격리 검사한다.
+- 폐쇄망 기능은 로컬 MCP 클라이언트용이다. 클라우드 ChatGPT/Claude가 사설 IP에 직접 접속하거나 인터넷 없이 모델을 실행한다는 뜻은 아니다. 상세: `docs/webmcp-lan-offline.md`.
+
 # 원격제어 (RemoteControl) v1.8.14
 
 

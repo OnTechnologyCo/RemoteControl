@@ -1,3 +1,9 @@
+## LAN IP / 인터넷 없는 내부망 (v1.8.15)
+
+설치 후 **LLM / MCP 설정 → LAN / 내부망 설정**에서 이 PC의 IPv4와 접속 허용 대역을 지정한다. 기본 HTTPS **443**이며 접속 주소는 `https://LAN_IP/mcp`이다. DDNS·터널·인터넷 인증 조회 없이 로컬 MCP 클라이언트가 DCR + PKCE로 로그인한다. 클라이언트 PC에는 대상 PC의 공개 CA를 최초 1회 등록한다. 기존 외부 DDNS WebMCP가 같은 443을 사용하는 경우 하나의 소유 HTTPS 서비스에서 도메인과 LAN IP를 분기한다.
+
+[LAN 설정·인증서·클라이언트 사용법](../docs/webmcp-lan-offline.md). 외부 웹 ChatGPT/Claude 커넥터와 폐쇄망 로컬 MCP 클라이언트는 접속 가능한 네트워크가 다르며 클라우드 앱이 사설 IP에 직접 접속할 수 있다는 뜻은 아니다.
+
 # 원격제어 웹 ChatGPT / Claude 연결
 
 

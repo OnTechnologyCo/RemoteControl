@@ -19,13 +19,13 @@ namespace RemoteControl
         private readonly System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer();
         internal McpForm(Func<string> getStatus)
         {
-            readStatus=getStatus;Text="LLM / MCP 설정 · 이 PC에서 작업 허용";ClientSize=new Size(620,570);
+            readStatus=getStatus;Text="LLM / MCP 설정 · 이 PC에서 작업 허용";ClientSize=new Size(620,625);
             Font=new Font("맑은 고딕",9);StartPosition=FormStartPosition.CenterParent;FormBorderStyle=FormBorderStyle.FixedDialog;MaximizeBox=false;MinimizeBox=false;
             Config.Reload();McpOptions o;try{o=McpOptions.Load();}catch{o=new McpOptions{Roots=new[]{McpOptions.DefaultRoot}};}
-            LabelAt("로컬·외부에서 같은 WebMCP HTTPS 주소로 ChatGPT·Claude를 연결합니다.\r\n파일·폴더 전송은 브라우저로 사용하며 LLM PC용 연결기 설치가 필요 없습니다.",20,18,580,48);
+            LabelAt("LAN / 폐쇄망은 LAN IP HTTPS, 외부망은 공개 HTTPS WebMCP로 연결합니다.\r\n파일·폴더 전송은 브라우저로 사용하며 LLM PC용 연결기 설치가 필요 없습니다.",20,18,580,48);
             enabled=new CheckBox{Text="이 PC의 MCP 사용 (WebMCP 내부 연결 포함)",Checked=o.Enabled,Location=new Point(20,76),AutoSize=true};Controls.Add(enabled);
             LabelAt("MCP 포트",350,78,85,25);port=new NumericUpDown{Minimum=1,Maximum=65535,Value=o.Port,Location=new Point(440,75),Width=140};Controls.Add(port);
-            LabelAt("직접 LAN 연결 허용 IPv4 / 대역 (WebMCP 내부 연결은 자동 허용)",20,118,580,23);
+            LabelAt("내부 MCP 포트 접속 허용 IPv4 / 대역 (LAN WebMCP 대역은 별도 설정)",20,118,580,23);
             networks=new TextBox{Text=o.AllowedNetworks,Location=new Point(20,144),Width=580};Controls.Add(networks);
             LabelAt("파일 작업 폴더 (한 줄에 하나, 절대 경로)",20,183,580,23);
             roots=new TextBox{Text=string.Join("\r\n",o.Roots),Multiline=true,ScrollBars=ScrollBars.Vertical,Location=new Point(20,209),Size=new Size(580,94)};Controls.Add(roots);
@@ -37,7 +37,7 @@ namespace RemoteControl
                 string here=Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location),folder=Path.Combine(here,"plugins");
                 if(!Directory.Exists(folder))folder=here;Process.Start(new ProcessStartInfo("explorer.exe",McpProcesses.Quote(folder)){UseShellExecute=true});
             });
-            AddButton("WebMCP 주소 복사",185,482,155,delegate{try{string url=Config.Get("mcp_web_url");if(string.IsNullOrEmpty(url))throw new IOException("웹 설정에서 먼저 HTTPS 주소를 연결하세요.");Clipboard.SetText(url.TrimEnd('/')+"/mcp");status.Text="같은 주소를 로컬·외부 ChatGPT / Claude에 등록하세요.";}catch(Exception ex){MessageBox.Show(this,ex.Message,"WebMCP 주소",MessageBoxButtons.OK,MessageBoxIcon.Information);}});
+            AddButton("WebMCP 주소 복사",185,482,155,delegate{try{string url=Config.Get("mcp_web_url");if(string.IsNullOrEmpty(url))throw new IOException("웹 설정에서 먼저 HTTPS 주소를 연결하세요.");Clipboard.SetText(url.TrimEnd('/')+"/mcp");status.Text="공개 HTTPS 주소를 외부 ChatGPT / Claude에 등록하세요.";}catch(Exception ex){MessageBox.Show(this,ex.Message,"WebMCP 주소",MessageBoxButtons.OK,MessageBoxIcon.Information);}});
             AddButton("웹 ChatGPT / Claude 설정",350,482,250,delegate{
                 try {
                     string setup=Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location),"uninstall.exe");
@@ -45,8 +45,11 @@ namespace RemoteControl
                     Process.Start(new ProcessStartInfo(setup,"/web-settings"){UseShellExecute=true,Verb="runas"});
                 }catch(Exception ex){MessageBox.Show(this,ex.Message,"웹 연결 설정",MessageBoxButtons.OK,MessageBoxIcon.Information);}
             });
-            AddButton("저장",400,524,95,Save);AddButton("닫기",505,524,95,delegate{Close();});
-            LabelAt("같은 HTTPS MCP 주소로 연결 · 파일 전송은 브라우저에서 사용",20,530,370,28).Font=new Font(Font.FontFamily,8);
+            AddButton("LAN / 내부망 설정",20,524,185,delegate{try{string setup=Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location),"uninstall.exe");if(!File.Exists(setup))throw new IOException("새 Setup으로 설치하세요.");Process.Start(new ProcessStartInfo(setup,"/lan-web-settings"){UseShellExecute=true,Verb="runas"});}catch(Exception ex){MessageBox.Show(this,ex.Message,"LAN WebMCP");}});
+            AddButton("LAN MCP 주소 복사",215,524,185,delegate{try{Config.Reload();string url=Config.Get("mcp_lan_url");if(Config.Get("mcp_lan_enabled")!="1"||string.IsNullOrEmpty(url))throw new IOException("LAN / 내부망 설정에서 먼저 연결하세요.");Clipboard.SetText(url.TrimEnd('/')+"/mcp");}catch(Exception ex){MessageBox.Show(this,ex.Message,"LAN WebMCP");}});
+            AddButton("LAN 공개 CA 폴더",410,524,190,delegate{try{string folder=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),"RemoteControlLanWebMcp","certificates");if(!Directory.Exists(folder))throw new IOException("LAN WebMCP 설정을 먼저 적용하세요.");Process.Start(new ProcessStartInfo("explorer.exe",McpProcesses.Quote(folder)){UseShellExecute=true});}catch(Exception ex){MessageBox.Show(this,ex.Message,"LAN 인증서");}});
+            AddButton("저장",400,579,95,Save);AddButton("닫기",505,579,95,delegate{Close();});
+            LabelAt("LAN 최초 연결: 클라이언트 PC에 공개 CA 등록",20,585,370,28).Font=new Font(Font.FontFamily,8);
         }
         private Label LabelAt(string text,int x,int y,int w,int h){var c=new Label{Text=text,Location=new Point(x,y),Size=new Size(w,h)};Controls.Add(c);return c;}
         private void AddButton(string text,int x,int y,int w,Action action){var b=new Button{Text=text,Location=new Point(x,y),Size=new Size(w,30)};b.Click+=delegate{action();};Controls.Add(b);}

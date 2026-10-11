@@ -1,4 +1,4 @@
-﻿# 구성 생성/사전 검사만 한다. 서비스와 방화벽은 여기서 변경하지 않는다.
+# 구성 생성/사전 검사만 한다. 서비스와 방화벽은 여기서 변경하지 않는다.
 function Get-WebMcpUri([string]$PublicUrl,[int]$LanPort,[int]$GatewayPort) {
     $uri=[Uri]$PublicUrl
     if($uri.Scheme -ne 'https' -or $uri.AbsolutePath -ne '/' -or $uri.Query -or $uri.Fragment -or $uri.UserInfo -or $uri.HostNameType -ne 'Dns' -or ($uri.Port -ne 443 -and $uri.Port -lt 1024)){throw '경로 없는 HTTPS DDNS 주소와 기본 포트 443 또는 전용 포트(1024~65535)를 지정하세요.'}
@@ -76,6 +76,8 @@ $rootRedirect
     }
 }
 "@
+    $helper=Join-Path $PSScriptRoot 'LanWebMcpConfig.ps1'
+    if(Test-Path -LiteralPath $helper){. $helper;return Add-ConfiguredLanWebMcpSite ($config+$separateRoot) $Uri.Port}
     return $config+$separateRoot
 }
 function New-WebMcpLegacyRootConfig($LegacyRoot,[string]$StateDir) {

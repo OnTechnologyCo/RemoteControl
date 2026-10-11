@@ -19,13 +19,13 @@ namespace RemoteControlSetup
             Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false);
             try {
                 Directory.CreateDirectory(args[0]); int cases = 0;
-                foreach (string kind in new[] {"SetupForm", "UninstallForm", "WebSettingsForm", "TailscaleSettingsForm"}) {
-                    bool uninstall=kind=="UninstallForm", tailscale=kind=="TailscaleSettingsForm", webSettings=kind=="WebSettingsForm"||tailscale;
+                foreach (string kind in new[] {"SetupForm", "UninstallForm", "WebSettingsForm", "TailscaleSettingsForm", "LanSettingsForm"}) {
+                    bool uninstall=kind=="UninstallForm", tailscale=kind=="TailscaleSettingsForm", lanSettings=kind=="LanSettingsForm", webSettings=kind=="WebSettingsForm"||tailscale||lanSettings;
                     Assembly setup = args.Length > 1 ? Assembly.LoadFile(Path.GetFullPath(args[1])) : Assembly.GetExecutingAssembly();
                     using (Form form = (Form)Activator.CreateInstance(setup.GetType("RemoteControlSetup."+(tailscale?"WebSettingsForm":kind),true),true)) {
                         form.Opacity=0; form.ShowInTaskbar=false; form.StartPosition=FormStartPosition.Manual;
                         form.Show(); Application.DoEvents();
-                        if(webSettings) {
+                        if(webSettings && !lanSettings) {
                             ((ComboBox)Find(form,"WebConnectionMode")).SelectedIndex=tailscale?1:0;
                             if(!tailscale)((TextBox)Find(form,"WebAddress")).Text="https://najhna.dyndns.org";
                             ((CheckBox)Find(form,"WebDefaultHttpsPort")).Checked=true;
@@ -40,7 +40,7 @@ namespace RemoteControlSetup
                             form.Size=new Size(Math.Min((uninstall?480:580)*dpi/96,work.Width),Math.Min((uninstall?340:webSettings?540:740)*dpi/96,work.Height));
                             form.GetType().BaseType.GetMethod("SetDisplayMetrics",BindingFlags.Instance|BindingFlags.NonPublic).Invoke(form,new object[]{dpi,font/100f,work});
                             Application.DoEvents(); view.AutoScrollPosition=Point.Empty;
-                            string label=(uninstall?"uninstall":tailscale?"tailscale-settings":webSettings?"web-settings":"setup")+"-dpi"+dpi+"-font"+font+"-"+work.Width+"x"+work.Height;
+                            string label=(uninstall?"uninstall":lanSettings?"lan-settings":tailscale?"tailscale-settings":webSettings?"web-settings":"setup")+"-dpi"+dpi+"-font"+font+"-"+work.Width+"x"+work.Height;
                             Require(form.Width<=work.Width && form.Height<=work.Height,label+": window outside work area");
                             Require(view.Height>0 && view.Bottom<=footer.Top,label+": footer overlaps body");
                             foreach (Control button in footer.Controls) {

@@ -1,4 +1,4 @@
-﻿# 파일/인증서는 보존한다. 설치 상태를 다시 확인할 수 있게 자동 실행만 중지한다.
+# 파일/인증서는 보존한다. 설치 상태를 다시 확인할 수 있게 자동 실행만 중지한다.
 [CmdletBinding()]
 param()
 $ErrorActionPreference = 'Stop'
@@ -21,3 +21,6 @@ foreach($rule in Get-NetFirewallRule -Name 'RemoteControlWebMcp-TCP-*' -ErrorAct
     $rule|Disable-NetFirewallRule
 }
 '웹 MCP 자동 실행과 외부 접속을 중지했습니다. 원격제어 본체와 LAN MCP, 웹 MCP 파일은 유지했습니다.'
+
+$lanHelper=Join-Path $PSScriptRoot 'LanWebMcpConfig.ps1'
+if(Test-Path -LiteralPath $lanHelper){. $lanHelper;Resume-LanWebMcpStandalone}

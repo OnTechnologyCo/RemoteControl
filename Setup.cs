@@ -82,7 +82,7 @@ namespace RemoteControlSetup
 
         internal const string Product = "원격제어";
 
-        internal const string Version = "1.8.14";
+        internal const string Version = "1.8.15";
 
         internal const string ExeName = "RemoteControl.exe";
 
@@ -758,6 +758,9 @@ namespace RemoteControlSetup
 
         internal int Port = 5900;
 
+        internal bool LanWebMcp;
+        internal string LanAddress, LanNetworks;
+        internal int LanHttpsPort=443, LanGatewayPort=59338;
         internal bool WebMcp;
         internal string WebUrl;
         internal bool WebTailscale, WebPrivate;
@@ -781,6 +784,7 @@ namespace RemoteControlSetup
         {
 
             WebMcp.Validate(o);
+            LanWebMcp.Validate(o);
 
             say("폴더를 만듭니다: " + o.Dir);
 
@@ -791,6 +795,7 @@ namespace RemoteControlSetup
             say("연결 패키지를 준비합니다…");
             WebMcp.ExtractPackages(o.Dir, o.WebMcp && !o.WebTailscale && !o.WebPrivate ? o.WebUrl : null);
             WebMcp.Preflight(o, say);
+            LanWebMcp.Preflight(o, say);
 
             say("원격제어를 멈춥니다…");
 
@@ -1023,6 +1028,7 @@ namespace RemoteControlSetup
             say("");
 
             if (o.WebMcp) WebMcp.Activate(o, say);
+            if (o.LanWebMcp) LanWebMcp.Activate(o, say);
 
             say("설치가 끝났습니다.");
 
@@ -1332,7 +1338,8 @@ namespace RemoteControlSetup
 
                         if (t.StartsWith("port=", StringComparison.OrdinalIgnoreCase)) continue;
 
-                        if (o.WebMcp && (t.StartsWith("mcp_enabled=", StringComparison.OrdinalIgnoreCase) || (!o.WebTailscale && !o.WebPrivate && t.StartsWith("mcp_web_url=", StringComparison.OrdinalIgnoreCase)))) continue;
+                        if ((o.WebMcp || o.LanWebMcp) && t.StartsWith("mcp_enabled=", StringComparison.OrdinalIgnoreCase)) continue;
+                        if (o.WebMcp && !o.WebTailscale && !o.WebPrivate && t.StartsWith("mcp_web_url=", StringComparison.OrdinalIgnoreCase)) continue;
 
 
                         if (t.StartsWith("tskey=", StringComparison.OrdinalIgnoreCase) ||
@@ -1369,6 +1376,7 @@ namespace RemoteControlSetup
 
                 lines.Add("port=" + o.Port);
 
+                if(o.LanWebMcp && !o.WebMcp)lines.Add("mcp_enabled=1");
                 if (o.WebMcp) { lines.Add("mcp_enabled=1"); if(!o.WebTailscale && !o.WebPrivate)lines.Add("mcp_web_url=" + WebMcp.NormalizeUrl(o.WebUrl)); }
                 say("  접속 포트를 " + o.Port + " 로 정했습니다.");
 
@@ -1918,6 +1926,7 @@ namespace RemoteControlSetup
 
             say("웹 MCP 자동 실행을 끕니다 (인증서와 연결 설정은 보존)…");
 
+            LanWebMcp.Disable(say);
             WebMcp.Disable(say);
 
 
@@ -2137,6 +2146,7 @@ namespace RemoteControlSetup
 
         private CheckBox chkLock, chkRun, chkFw, chkDesk, chkVdd;
         private WebConnectionControls webConnection;
+        private LanConnectionControls lanConnection;
         private Button btnGo, btnBrowse;
 
         private NumericUpDown numPort;
@@ -2322,6 +2332,7 @@ namespace RemoteControlSetup
 
 
             webConnection = new WebConnectionControls(Row, true);
+            lanConnection = new LanConnectionControls(Row, true);
 
 
 
@@ -2436,7 +2447,9 @@ namespace RemoteControlSetup
             };
             if (string.IsNullOrEmpty(o.Dir)) throw new ArgumentException("설치 위치를 정해 주세요.");
             webConnection.Apply(o);
+            lanConnection.Apply(o);
             WebMcp.Validate(o);
+            LanWebMcp.Validate(o);
             return o;
         }
         private void Go()
@@ -2448,7 +2461,7 @@ namespace RemoteControlSetup
 
             btnGo.Enabled = false;
             btnBrowse.Enabled = false;
-            webConnection.SetBusy(true);
+            webConnection.SetBusy(true);lanConnection.SetBusy(true);
             bar.Visible = true;
 
             bar.Style = ProgressBarStyle.Marquee;
@@ -2481,7 +2494,7 @@ namespace RemoteControlSetup
 
                         btnGo.Enabled = true;
                         btnBrowse.Enabled = true;
-                        webConnection.SetBusy(false);
+                        webConnection.SetBusy(false);lanConnection.SetBusy(false);
 
 
                         if (!ok) return;
@@ -2718,6 +2731,7 @@ namespace RemoteControlSetup
 
             Application.SetCompatibleTextRenderingDefault(false);
 
+            if (Sys.HasArg("/lan-web-settings")) {Application.Run(new LanSettingsForm());return 0;}
             if (Sys.HasArg("/web-settings"))
             {
                 Application.Run(new WebSettingsForm());

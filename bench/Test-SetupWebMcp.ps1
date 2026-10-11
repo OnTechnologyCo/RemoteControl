@@ -24,7 +24,7 @@ $dest=Join-Path $root ('artifacts\setup-web-test\'+[Guid]::NewGuid().ToString('N
 
 $version=(Get-Item -LiteralPath $setup).VersionInfo.FileVersion
 
-if($version -ne '1.8.14.0'){throw "예상하지 않은 Setup 버전: $version"}
+if($version -ne '1.8.15.0'){throw "예상하지 않은 Setup 버전: $version"}
 
 $resources=$assembly.GetManifestResourceNames()
 
@@ -97,7 +97,7 @@ $manifest=Read-ZipText $plugin 'remotecontrol-web/plugin.json' | ConvertFrom-Jso
 
 $mcp=Read-ZipText $plugin 'remotecontrol-web/mcp.json' | ConvertFrom-Json
 
-if($manifest.name -ne 'remotecontrol-web' -or $manifest.version -ne '1.8.14'){throw '웹 플러그인 ID/버전 불일치'}
+if($manifest.name -ne 'remotecontrol-web' -or $manifest.version -ne '1.8.15'){throw '웹 플러그인 ID/버전 불일치'}
 
 if($mcp.mcpServers.'remotecontrol-web'.type -ne 'streamable-http' -or $mcp.mcpServers.'remotecontrol-web'.url -cne 'https://najhna.dyndns.org:59334/mcp'){throw '웹 MCP 연결 정보 불일치'}
 
