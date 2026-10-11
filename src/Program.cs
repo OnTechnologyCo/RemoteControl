@@ -300,7 +300,7 @@ namespace RemoteControl
 
         /// <summary>이 프로그램의 판 번호. 창 제목과 머리글에 보인다.</summary>
 
-        internal const string Version = "1.8.15";
+        internal const string Version = "1.8.17";
 
 
 

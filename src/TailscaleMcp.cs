@@ -105,7 +105,7 @@ namespace RemoteControl
             ThreadPool.QueueUserWorkItem(delegate{
                 try{
                     if(!Current(generation,address)||chat!=Notify.ChatId)return;
-                    bool delivered=Notify.Send(Notify.ConnectionAddresses(RemoteTunnel.CurrentUrl,address,true));
+                    bool delivered=Notify.Send(Notify.ConnectionAddresses(RemoteTunnel.CurrentUrl,address,true,Notify.PreviousMcpAddress(chat)));
                     lock(gate){
                         if(!Current(generation,address)||chat!=Notify.ChatId)return;
                         if(delivered)Config.SetManyIf("mcp_web_mode","tailscale",new Dictionary<string,string>{{"tg_mcp_url",sent}},null);

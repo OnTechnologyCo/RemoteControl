@@ -1,8 +1,12 @@
+## v1.8.17 persistent tunnel addresses and device-aware notifications
+
+Requires SSHTunnel 1.5.0 or newer and uses a stable service identity across reconnects, helper restarts, and local port changes. Telegram notices identify the PC, RemoteControl login ID, relay device name, relay account and server, plus the previous and new URLs. Passwords and access keys are excluded. Keep both the client identity files and server reservations; switching Windows profiles or relay accounts can select a different identity. [Address persistence and notification details](docs/tunnel-address-notifications.md).
+
 ## v1.8.15 LAN IP and offline WebMCP
 
 Enable the independent LAN settings to connect a local MCP client to `https://LAN_IP/mcp` on HTTPS 443. Import the target PC public CA once, then authenticate with the existing RemoteControl credentials using DCR and PKCE. Server authentication and file transfers require no internet, DDNS, or tunnel. An owned external HTTPS service can share the same port by routing domain and IP hosts separately. Cloud ChatGPT/Claude cannot directly reach private LAN IPs or run offline. [LAN guide](docs/webmcp-lan-offline.md).
 
-# RemoteControl v1.8.14
+# RemoteControl v1.8.17
 
 [한국어](README.md) | [English](README.en.md)
 
@@ -12,7 +16,7 @@ A Windows remote desktop and file transfer application with a browser viewer, LA
 
 Select automatic private tunnel connection in the web ChatGPT / Claude settings to use the HTTPS address issued by SSHTunnel for both the browser viewer and `/mcp`. Exact MCP, OAuth, discovery, and file transfer routes go to a separate authenticated loopback gateway. Manual DDNS settings and existing viewer routes are preserved.
 
-Authentication is restored after a restart when the public address stays the same. A new random address after an SSH reconnect requires registering the new `/mcp` URL in the app and signing in again. See [web MCP settings](web-mcp/README.md) and [private tunnel usage](docs/private-tunnel.md).
+Authentication is restored after a restart when the public address stays the same. A changed public address after identity replacement requires registering the new `/mcp` URL in the app and signing in again. See [web MCP settings](web-mcp/README.md) and [private tunnel usage](docs/private-tunnel.md).
 
 ## MCP authentication and file transfer
 
@@ -32,7 +36,7 @@ The `pc_open_file_transfer` tool opens a one-time browser transfer page for uplo
 
 ## Build
 
-Use 64-bit Windows with the .NET Framework 4.x C# compiler. The Tailscale helper declares Go 1.26.6 in `tsproxy/go.mod`. The private tunnel helper uses the SSHTunnel 1.3 Go SDK through the sibling source folder `../SSHTunnel` (`sshtunnel-client/go.mod`). The complete installer build also requires Node.js 24.14.0 or newer and npm. Dependency and runtime downloads may require internet access.
+Use 64-bit Windows with the .NET Framework 4.x C# compiler. The Tailscale helper declares Go 1.26.6 in `tsproxy/go.mod`. The private tunnel helper uses the SSHTunnel 1.5.0+ Go SDK through the sibling source folder `../SSHTunnel` (`sshtunnel-client/go.mod`). The complete installer build also requires Node.js 24.14.0 or newer and npm. Dependency and runtime downloads may require internet access.
 
 Run from the project root:
 

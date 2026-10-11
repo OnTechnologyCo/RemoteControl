@@ -1,5 +1,18 @@
-> GitHub 비공개 업로드 사본: 실제 텔레그램 봇 토큰은 제외했다. 현재 `Notify.BotToken`은 `REMOTE_CONTROL_TELEGRAM_BOT_TOKEN` 실행 환경 변수를 읽는다. 아래 소스 상수 방식과 PC 상태는 과거 기록이며, 기존 원본과 설치된 서비스를 변경한 것이 아니다.
+> GitHub 업로드 사본: 실제 텔레그램 봇 토큰은 제외했다. 현재 `Notify.BotToken`은 `REMOTE_CONTROL_TELEGRAM_BOT_TOKEN` 실행 환경 변수를 읽는다. 아래 소스 상수 방식과 PC 상태는 과거 기록이며, 기존 원본과 설치된 서비스를 변경한 것이 아니다.
 
+## 터널 주소 유지 및 알림 (v1.8.17)
+
+- SSHTunnel 1.5.0 이상 SDK와 고정 서비스 식별자 remotecontrol을 유지한다. 실행 계정의 저장된 식별키를 삭제하거나 빌드·설치 시 초기화하지 않는다.
+- Notify.ConnectionIdentity()는 PC명, 원격제어 로그인 ID, SSHTunnel 장비명·계정·서버를 알림에 표시한다. 비밀번호·인증키는 표시하지 않는다. SYSTEM은 로그인 ID가 아니다.
+- 화면 주소 변경 알림은 이전/변경 주소를 표시한다. MCP 자동 알림은 같은 수신자에게 성공적으로 보낸 이전 주소를 함께 표시한다. 중복 방지·실패 재시도와 공개 접속 확인을 보존한다.
+- bench/Test-NotifyMessages.ps1는 PC·계정 식별, 자격 증명 제외, 이전/새 주소, Tailscale의 이전 SSH 설정 제외를 검증하며 실제 메시지는 전송하지 않는다.
+
+## 터널 주소 유지 (v1.8.16)
+
+- 소스 SDK는 D:\src\SSHTunnel 한 곳의 1.5.0 이상을 사용한다. 빌드에서 identity.go를 확인한다.
+- helper는 Identity를 remotecontrol로 고정한다. 내부 MCP 프록시의 임시 포트, 화면 포트, 표시 이름으로 신원을 만들지 않는다.
+- 식별키는 SDK 기본 실행 계정 설정 폴더에 유지한다. 설치/업데이트에서 삭제하거나 재발급하지 않는다. 구형 클라이언트 최초 전환 때만 새 주소가 한 번 발급된다.
+- Test-SshTunnel.ps1의 38개 검사와 Test-SshPrivateMcp.ps1의 10개 검사로 프로세스 재시작, 포트/이름 변경, 실제 SSH 재연결, MCP 임시 포트 변경 뒤 주소 및 OAuth 유지가 확인되었다. 시험 신원은 임시 APPDATA로 격리한다.
 ## LAN IP / 폐쇄망 WebMCP (v1.8.15)
 
 - `SetupLanMcp.cs`, `SetupLanForm.cs`는 독립 LAN 설정을 제공한다. `/lan-web-settings`는 본체 재설치 없이 적용한다.
@@ -31,10 +44,10 @@
 
 ## SSHTunnel 웹 연결 (v1.8.11)
 
-- 프라이빗 연결은 형제 폴더 `SSHTunnel` 1.3.0의 `pkg/tunnel` SDK를 사용한다. `protocol: http`로 랜덤 HTTPS URL을 발급받으며 고정 reverse 포트·OpenSSH·known_hosts를 쓰지 않는다.
+- 프라이빗 연결은 형제 폴더 `SSHTunnel` 1.5.0의 `pkg/tunnel` SDK를 사용한다. `protocol: http`로 랜덤 HTTPS URL을 발급받으며 고정 reverse 포트·OpenSSH·known_hosts를 쓰지 않는다.
 - `sshtunnel-client/`와 `빌드_sshtunnel.ps1`에서 전용 helper를 빌드한다. `빌드.ps1`은 helper를 먼저 빌드해 본체에 임베드한다. `SshHelper.cs`는 SHA-256 확인과 보호된 실행 폴더를 사용한다.
 - 연결 설정은 주소·SSH 포트(신규 기본 2222)·계정·인증키·SHA256 지문·터널 이름이다. 인증키는 DPAPI 두 사본으로 저장하고 helper stdin으로만 전달한다. 발급 URL을 수동 설정으로 대체하지 않는다.
-- 실제 SSH 종료 후 자동 재연결마다 새 URL을 표시한다. DNS·443·인증서 실패는 살아 있는 SSH와 발급 주소를 보존한다. 외부 `/ping` 확인 후에만 주소 알림을 보낸다. 서버의 와일드카드 DNS·HTTPS 개통은 별도이며 다른 프로그램의 80/443을 건드리지 않는다.
+- SSHTunnel 1.5.0 이상에서 고정 서비스 식별자를 사용하여 실제 SSH 종료·helper 재시작·MCP 임시 포트 변경 후에도 저장된 신원과 URL을 재사용한다. DNS·443·인증서 실패는 살아 있는 SSH와 발급 주소를 보존한다. 외부 `/ping` 확인 후에만 주소 알림을 보낸다. 서버의 와일드카드 DNS·HTTPS 개통은 별도이며 다른 프로그램의 80/443을 건드리지 않는다.
 - `bench/Test-SshTunnel.ps1`은 실제 SSHTunnel 서버, 일회용 인증키·호스트 키, 임시 폴더·루프백 포트로 HTTP·WebSocket·전송·지문/계정 거부·주소 재발급·중지·취소를 검증한다. 운영 설정과 서비스는 수정하지 않는다.
 
 ## LAN MCP (v1.7.0)

@@ -1,4 +1,4 @@
-﻿$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $testDir = Join-Path $root ('artifacts\sshtunnel-test-' + [guid]::NewGuid().ToString('N'))
 [void][IO.Directory]::CreateDirectory($testDir)
@@ -30,7 +30,9 @@ try {
         }
         Start-Sleep -Milliseconds 100
     }
-    & $exe $infoPath
+    $previousAppData = $env:APPDATA
+    $env:APPDATA = Join-Path $testDir "appdata"
+    try { & $exe $infoPath } finally { $env:APPDATA = $previousAppData }
     if ($LASTEXITCODE -ne 0) { throw 'SSHTunnel integration tests failed' }
 } finally {
     if (-not $fixture.HasExited) { $fixture.Kill(); [void]$fixture.WaitForExit(3000) }

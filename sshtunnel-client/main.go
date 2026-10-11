@@ -72,7 +72,8 @@ func run(ctx context.Context, input io.Reader, output io.Writer) error {
 		target = shared.listener.Addr().String()
 	}
 	session, err := tunnel.Open(ctx, tunnel.Options{Protocol: "http", Server: cfg.Server, User: cfg.User, AccessKey: cfg.AccessKey,
-		Fingerprint: cfg.Fingerprint, Target: target, Name: cfg.Name, MaxConnections: 64})
+		// MCP 프록시는 시작마다 임시 포트를 쓰므로 주소 신원은 포트나 표시 이름과 분리한다.
+		Fingerprint: cfg.Fingerprint, Target: target, Name: cfg.Name, Identity: "remotecontrol", MaxConnections: 64})
 	if err != nil {
 		return err
 	}

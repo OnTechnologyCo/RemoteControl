@@ -94,11 +94,17 @@ namespace RemoteControl
                 }
                 RemoteTunnel.Stop(); Config.Set("tunnelrevision", Guid.NewGuid().ToString("N")); RemoteTunnel.SyncSettings();
                 string second = RemoteTunnel.Start(backend.Port);
-                Check(second != null && second != first, "reconnect publishes a newly issued address");
-                bool closed = false;
-                try { using (var response = Request(first, gateway, "/ping", null)) { } }
-                catch (WebException ex) { var response=ex.Response as HttpWebResponse; closed=response!=null && response.StatusCode==HttpStatusCode.NotFound; if(response!=null)response.Close(); }
-                Check(closed, "old URL no longer routes after tunnel closure");
+                Check(second != null && second == first, "new helper process reuses the persisted address");
+                using (var response = Request(first, gateway, "/ping", null))
+                    Check(response.StatusCode == HttpStatusCode.OK, "original URL still routes after reconnect");
+                RemoteTunnel.Stop();
+                using (var moved = new Backend())
+                {
+                    Config.Set("port", moved.Port.ToString()); Config.Set("sshname", "renamed device"); RemoteTunnel.SyncSettings();
+                    Check(RemoteTunnel.Start(moved.Port) == first, "port and display name changes preserve the address");
+                    using (var response = Request(first, gateway, "/ping", null))
+                        Check(response.StatusCode == HttpStatusCode.OK, "preserved address reaches the moved backend");
+                }
                 RemoteTunnel.Stop(); Config.Set("sshfingerprint", "SHA256:" + new string('A',43)); RemoteTunnel.SyncSettings();
                 Check(RemoteTunnel.Start(backend.Port)==null && RemoteTunnel.RetryBlocked, "wrong server fingerprint blocks connection and retries");
                 Config.Set("sshfingerprint",Json.Str(info,"fingerprint")); Config.Set("sshuser","wrong"); RemoteTunnel.SyncSettings();
@@ -114,7 +120,8 @@ namespace RemoteControl
                 Wait(RemoteTunnel.IsAlive,"guard restores saved automatic connection");
                 string beforeReconnect=RemoteTunnel.CurrentUrl;
                 using(var client=new WebClient()) { client.Proxy=null; client.UploadData("http://127.0.0.1:"+Json.Str(info,"controlPort")+"/disconnect",new byte[0]); }
-                Wait(delegate {return RemoteTunnel.IsAlive() && RemoteTunnel.CurrentUrl!=beforeReconnect;},"guard reconnects after actual relay disconnect with new URL");
+                Wait(delegate {return !RemoteTunnel.IsAlive();},"actual relay disconnect closes the helper");
+                Wait(delegate {return RemoteTunnel.IsAlive() && RemoteTunnel.CurrentUrl==beforeReconnect;},"guard reconnects with the same persisted URL");
                 Config.Set("extauto","0"); RemoteTunnel.SyncSettings(); Thread.Sleep(5500);
                 Check(!RemoteTunnel.IsAlive(),"manual stop prevents automatic reconnect"); TunnelGuard.Disable();
                 var silent=new TcpListener(IPAddress.Loopback,0); silent.Start();

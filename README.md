@@ -1,8 +1,12 @@
+## v1.8.17 터널 주소 유지 및 PC·계정 알림
+
+SSHTunnel 1.5.0 이상과 고정 서비스 식별자를 사용해 재접속·helper 재시작·로컬 포트 변경 뒤 같은 주소를 재사용합니다. 텔레그램 알림에는 PC 이름, 원격제어 로그인 ID, 터널 장비명·계정·서버, 이전/변경 주소를 표시합니다. 비밀번호와 인증키는 포함하지 않습니다. [주소 변경 원인·유지 조건·알림 안내](docs/tunnel-address-notifications.md).
+
 ## v1.8.15 LAN IP / 폐쇄망 WebMCP
 
 **LLM / MCP 설정 → LAN / 내부망 설정**에서 대상 PC의 IP와 허용 대역을 지정하면 기본 443의 `https://LAN_IP/mcp`로 연결합니다. 공개 CA를 클라이언트 PC에 최초 1회 등록한 뒤 로컬 MCP 클라이언트에서 기존 ID·비밀번호로 로그인합니다. 인터넷·DDNS·터널 없이 서버 인증과 파일 전송을 사용하며, 외부 WebMCP와 같은 443을 사용하면 소유 HTTPS 서비스에서 도메인/IP를 분기합니다. [사용법](docs/webmcp-lan-offline.md). 클라우드 ChatGPT/Claude의 사설 IP 직접 연결 또는 오프라인 모델 실행을 의미하지 않습니다.
 
-# RemoteControl v1.8.14
+# RemoteControl v1.8.17
 
 [한국어](README.md) | [English](README.en.md)
 
@@ -10,7 +14,7 @@
 
 **웹 ChatGPT / Claude 설정 → 프라이빗 터널 주소 자동 연결**을 선택하면 SSHTunnel이 발급한 HTTPS 주소에서 화면과 MCP를 함께 사용할 수 있습니다. `/mcp`·OAuth·파일 전송 경로는 별도 loopback 인증 중계로 연결합니다. 직접 입력한 DDNS 주소와 기존 화면 연결 설정을 보존합니다.
 
-발급 주소가 같으면 재시작 뒤 인증을 복원합니다. 실제 SSH 재연결로 새 랜덤 주소를 받으면 앱에 새 `/mcp` 주소를 등록하고 다시 로그인해야 합니다. [웹 MCP 설정](web-mcp/README.md)과 [프라이빗 터널 사용법](docs/private-tunnel.md)을 참조하세요.
+발급 주소가 같으면 재시작 뒤 인증을 복원합니다. 식별키 변경 등으로 실제 공개 주소가 바뀌면 앱에 새 `/mcp` 주소를 등록하고 다시 로그인해야 합니다. [웹 MCP 설정](web-mcp/README.md)과 [프라이빗 터널 사용법](docs/private-tunnel.md)을 참조하세요.
 
 SSHTunnel Go SDK 소스는 형제 폴더 `..\SSHTunnel`에 준비합니다. `빌드_sshtunnel.ps1`은 전용 helper를 빌드하며 본체 빌드가 이를 포함합니다.
 

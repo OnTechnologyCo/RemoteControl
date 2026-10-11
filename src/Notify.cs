@@ -342,15 +342,15 @@ namespace RemoteControl
 
         internal static string AddressChanged(string oldUrl, string newUrl)
         {
-            return "⚠ 원격제어 주소가 바뀌었습니다\n\n" +
-                   "이전  " + (string.IsNullOrEmpty(oldUrl) ? "(없음)" : oldUrl + "/") + "\n" +
-                   "지금  " + newUrl + "/\n\n" +
+            return "⚠ 원격제어 주소가 바뀌었습니다\n\n" + ConnectionIdentity() + "\n\n" +
+                   "이전 주소: " + NoticeAddress(oldUrl) + "\n" +
+                   "변경 주소: " + NoticeAddress(newUrl) + "\n\n" +
                    "예전 주소로는 더 이상 들어갈 수 없습니다.\n" + Now();
         }
 
         internal static string WentDown(int minutes, string why)
         {
-            return "🔴 원격제어 외부망이 닫혔습니다\n\n" +
+            return "🔴 원격제어 외부망이 닫혔습니다\n\n" + ConnectionIdentity() + "\n\n" +
                    minutes + "분째 다시 열지 못하고 있습니다.\n" +
                    "사유: " + (string.IsNullOrEmpty(why) ? "알 수 없음" : why) + "\n\n" +
                    "계속 다시 열어 보는 중입니다.\n" + Now();
@@ -358,7 +358,7 @@ namespace RemoteControl
 
         internal static string CameBack(string url)
         {
-            return "🟢 원격제어 외부망이 돌아왔습니다\n\n" + url + "/\n\n" + Now();
+            return "🟢 원격제어 외부망이 돌아왔습니다\n\n" + ConnectionIdentity() + "\n\n주소: " + NoticeAddress(url) + "\n\n" + Now();
         }
     }
 }
