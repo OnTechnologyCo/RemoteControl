@@ -1,4 +1,8 @@
-## LAN IP / 인터넷 없는 내부망 (v1.8.15)
+## LAN IP / 인터넷 없는 내부망 (v1.8.18)
+
+여러 랜카드의 기본·추가 IPv4를 등록하고 적용하면 **연결 스크립트** 창에서 사용할 IP를 선택해 Claude Code, VS Code, Cursor, Codex 설정을 복사할 수 있다. 전체 안내는 각 IP의 `/mcp`, `/authorize`, `/ca/RemoteControl-LAN-CA.crt` 주소와 실제 공개 CA PEM 파일 바이트의 SHA256을 포함한다. 기본 포트 443은 URL에서 생략하며, 다른 포트는 모든 주소에 반영한다.
+
+각 IP는 자신의 OAuth issuer·resource와 로그인·전송 경로를 사용한다. IP를 추가하거나 기본 순서를 바꾸어도 기존 주소의 CA·인증 상태를 보존한다. 공개 CA는 정확한 파일 경로의 GET/HEAD 요청만 제공하며, 접속 허용 클라이언트 CIDR 검사를 따른다. 첫 CA 등록 전에는 HTTPS 다운로드도 신뢰되지 않을 수 있으므로 대상 PC의 `certificates` 폴더에서 공개 파일을 전달하고 표시된 SHA256을 대조한다.
 
 설치 후 **LLM / MCP 설정 → LAN / 내부망 설정**에서 이 PC의 IPv4와 접속 허용 대역을 지정한다. 기본 HTTPS **443**이며 접속 주소는 `https://LAN_IP/mcp`이다. DDNS·터널·인터넷 인증 조회 없이 로컬 MCP 클라이언트가 DCR + PKCE로 로그인한다. 클라이언트 PC에는 대상 PC의 공개 CA를 최초 1회 등록한다. 기존 외부 DDNS WebMCP가 같은 443을 사용하는 경우 하나의 소유 HTTPS 서비스에서 도메인과 LAN IP를 분기한다.
 

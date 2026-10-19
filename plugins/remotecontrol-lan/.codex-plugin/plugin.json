@@ -2,7 +2,7 @@
 
   "name": "remotecontrol-lan",
 
-  "version": "1.8.17",
+  "version": "1.8.22",
 
   "description": "RemoteControl ID/PW로 오프라인 LAN PC의 파일, 프로그램, 로그와 화면을 확인합니다.",
 
@@ -35,3 +35,4 @@
   "mcpServers": "./.mcp.json"
 
 }
+

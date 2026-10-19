@@ -1,11 +1,11 @@
-# 반사/구성/격리 파일 복사만 검사한다. 운영 서비스, 작업, 방화벽은 실행하지 않는다.
+﻿# 반사/구성/격리 파일 복사만 검사한다. 운영 서비스, 작업, 방화벽은 실행하지 않는다.
 $ErrorActionPreference='Stop'
 $root=Split-Path -Parent $PSScriptRoot
 . (Join-Path $root 'web-mcp\LanWebMcpConfig.ps1')
 $uri=Get-LanWebMcpUri '192.168.0.10' 443 59338 59331 '192.168.0.0/24'
 if($uri.GetLeftPart([UriPartial]::Authority) -ne 'https://192.168.0.10'){throw '기본 443에서 포트가 노출됩니다.'}
 foreach($caseValues in @(@('192.168.0.10',444,59338,59331,'192.168.0.0/24'),@('192.168.0.10',443,59331,59331,'192.168.0.0/24'),@('192.168.0.10',443,59338,59331,'0.0.0.0/0'),@('192.168.0.10',443,59338,59331,'1.2.3.4/'),@('bad.example',443,59338,59331,'192.168.0.0/24'))){$rejected=$false;try{Get-LanWebMcpUri @caseValues|Out-Null}catch{$rejected=$true};if(-not $rejected){throw '잘못된 LAN 설정을 수락했습니다.'}}
-$setup=Join-Path $root 'dist\RemoteControl_Setup.exe'
+$setup=Join-Path $root 'dist\RemoteControl_SetupEngine.exe'
 $assembly=[Reflection.Assembly]::LoadFile($setup)
 $flags=[Reflection.BindingFlags]'Instance,NonPublic,Public'
 $static=[Reflection.BindingFlags]'Static,NonPublic,Public'

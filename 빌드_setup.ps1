@@ -1,4 +1,4 @@
-# 사용법: 빌드_setup.ps1                       본체 + 설치 파일, 항상 dist에 생성
+﻿# 사용법: 빌드_setup.ps1                       본체 + 설치 파일, 항상 dist에 생성
 #         빌드_setup.ps1 -IncludeTailscaleKey   기존 Tailscale 키·알림 설정 포함
 #         빌드_setup.ps1 -NoKey                기본 동작과 같음 (기존 명령 호환)
 [CmdletBinding()]
@@ -15,9 +15,16 @@ $buildDir = Join-Path $root 'dist'
 $app = Join-Path $buildDir 'RemoteControl.exe'
 $ico = Join-Path $root 'remotecontrol.ico'
 $out = Join-Path $buildDir 'RemoteControl_Setup.exe'
+$engine = Join-Path $buildDir 'RemoteControl_SetupEngine.exe'
+$iscc = @((Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'), (Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe')) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+if (-not $iscc) { throw 'Inno Setup 6의 ISCC.exe를 찾을 수 없습니다.' }
 
 if ($NoKey -and $IncludeTailscaleKey) { throw "-NoKey와 -IncludeTailscaleKey는 함께 지정할 수 없습니다." }
 $NoKey = -not $IncludeTailscaleKey
+
+. (Join-Path $root 'build\Verify-Inputs.ps1')
+$pins = Get-Content -LiteralPath (Join-Path $root 'build\dependencies.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+Assert-VddPayload (Join-Path $root 'vdd') $pins.vdd
 
 # 오래된 exe를 포장하는 일을 막기 위해 setup을 만들 때 항상 현재 소스부터 빌드한다.
 & (Join-Path $root '빌드_tsproxy.ps1')
@@ -66,9 +73,9 @@ $man = Join-Path $env:TEMP "rc_setup.manifest"
 $presetArg = @()
 
 # 기본 빌드는 설정 파일 쪽(Tailscale 키, chat_id)을 포함하지 않는다.
-# 텔레그램 봇 토큰은 src\Notify.cs 에 박혀 있어 exe 안에 그대로 들어간다.
+# 텔레그램 봇 토큰은 실행 환경 또는 PC별 DPAPI 저장소에서 읽는다.
 # 받은 사람은 그 봇으로 글을 보낼 수 있다 (곤란해지면 @BotFather /revoke 로 갈면 된다).
-if ($NoKey) { "봇 토큰은 프로그램에 박혀 있어 이 파일에도 들어갑니다." }
+if ($NoKey) { "개인 Tailscale 키와 알림 토큰을 설치 파일에 포함하지 않습니다." }
 
 if (-not $NoKey) {
     Add-Type -AssemblyName System.Security
@@ -104,7 +111,7 @@ if (-not $NoKey) {
 
     $lines = @("tskey=" + $key)
 
-    # 알림 받을 곳만 싣는다. 봇 토큰은 src\Notify.cs 에 박혀 있어 옮길 것이 없다.
+    # 알림 받을 곳만 싣는다. 봇 토큰은 설치 화면에서 입력하거나 기존 PC에서 이전한다.
     $chat = ([string](($conf | Where-Object { $_ -like "tgchat=*" }) -replace "^tgchat=","")).Trim()
 
     if ($chat) {
@@ -141,7 +148,8 @@ $vddArg = @()
 $vddDir = Join-Path $root "vdd"
 
 if (Test-Path $vddDir) {
-    $files = Get-ChildItem $vddDir -File
+    $files = @()
+    if (Test-Path -LiteralPath (Join-Path $vddDir 'MttVDD.dll')) { $files = @(Get-ChildItem $vddDir -File) }
     foreach ($f in $files) {
         $vddArg += "/resource:" + $f.FullName + ",vdd/" + $f.Name
     }
@@ -160,12 +168,13 @@ $args = @(
     "/langversion:5"
     "/win32icon:" + $ico
     "/win32manifest:" + $man
-    "/out:" + $out
+    "/out:" + $engine
     "/r:System.dll"
     "/r:System.Core.dll"
     "/r:System.Drawing.dll"
     "/r:System.Windows.Forms.dll"
     "/r:System.ServiceProcess.dll"
+    "/r:System.Security.dll"
     "/r:System.IO.Compression.dll"
     "/r:System.Web.Extensions.dll"
     "/unsafe-"
@@ -175,6 +184,7 @@ $args = @(
     "/resource:" + (Join-Path $buildDir 'RemoteControl_Claude.mcpb') + ",RemoteControl_Claude.mcpb"
     "/resource:" + (Join-Path $buildDir 'RemoteControl_WebMCP.zip') + ",RemoteControl_WebMCP.zip"
     (Join-Path $root "Setup.cs")
+    (Join-Path $root "src\TelegramCredentials.cs")
     (Join-Path $root "SetupLayout.cs")
     (Join-Path $root "SetupWebForm.cs")
     (Join-Path $root "SetupLanMcp.cs")
@@ -193,8 +203,17 @@ if ($LASTEXITCODE -ne 0) {
 
 Remove-Item $man -Force -ErrorAction SilentlyContinue
 
-$fi = Get-Item $out
-"설치 파일 완료  {0:N2} MB  {1:HH:mm:ss}" -f ($fi.Length / 1MB), $fi.LastWriteTime
-"설치 파일 경로: $out"
-& powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $root 'web-mcp\Export-SetupPlugin.ps1') -Setup $out -Destination (Join-Path $buildDir 'RemoteControl_WebPlugin.zip')
+& powershell.exe -NoProfile -NonInteractive -File (Join-Path $root 'web-mcp\Export-SetupPlugin.ps1') -Setup $engine -Destination (Join-Path $buildDir 'RemoteControl_WebPlugin.zip')
 if($LASTEXITCODE -ne 0){throw 'Setup 웹 플러그인 ZIP 생성 실패'}
+
+$innoArgs = @('/Q')
+if ($vddArg.Count -gt 0) { $innoArgs += '/DHasVdd=1' }
+$innoArgs += Join-Path $root 'installer\RemoteControl.iss'
+& $iscc @innoArgs
+if ($LASTEXITCODE -ne 0) { throw 'Inno Setup 컴파일 실패' }
+$fi = Get-Item $out
+"Inno 설치 파일 완료  {0:N2} MB  {1:HH:mm:ss}" -f ($fi.Length / 1MB), $fi.LastWriteTime
+"설치 파일 경로: $out"
+
+# 배포물을 만든 소스와 포함된 바이너리를 해시로 연결한다. 설치나 서비스 재시작은 하지 않는다.
+& (Join-Path $root 'build\Write-BuildManifest.ps1') -Root $root

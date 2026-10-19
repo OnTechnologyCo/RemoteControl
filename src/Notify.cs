@@ -19,7 +19,7 @@
 // -------
 // 보내는 내용에 공개 주소가 들어간다. 그 주소는 텔레그램 서버에 남는다.
 // 로그인은 여전히 비밀번호로 막혀 있지만 "여기에 원격제어가 있다" 는 새어 나간다.
-// 이 저장소 사본은 실제 토큰을 실행 환경 변수로 받아 소스와 실행 파일에 남기지 않는다.
+// 토큰은 실행 환경 또는 이 PC의 DPAPI 저장소에서 읽어 배포 파일에 남기지 않는다.
 using System;
 using System.IO;
 using System.Net;
@@ -51,11 +51,11 @@ namespace RemoteControl
 
     internal static partial class Notify
     {
-        // 실제 봇 토큰을 저장소와 설치 파일에 남기지 않도록 실행 환경에서 받는다.
-        // 서비스와 대리 프로세스에도 해당 환경 변수를 별도로 제공해야 한다.
+        // 구버전 설치의 토큰은 Setup이 PC별 DPAPI 저장소로 보존한다.
+        // 새 설치는 실행 환경 변수로 토큰을 제공할 수 있다.
         internal static string BotToken
         {
-            get { return (Environment.GetEnvironmentVariable("REMOTE_CONTROL_TELEGRAM_BOT_TOKEN") ?? "").Trim(); }
+            get { return RemoteControlSecrets.TelegramCredentials.Read(); }
         }
 
         internal static string LastError = "";
@@ -118,7 +118,7 @@ namespace RemoteControl
         /// </summary>
         internal static bool Send(string text)
         {
-            if (!HasBot) { LastError = "이 빌드에는 알림 봇이 들어 있지 않습니다."; return false; }
+            if (!HasBot) { LastError = "이 PC의 알림 봇 토큰이 설정되지 않았습니다."; return false; }
             if (!IsConfigured) { LastError = "알림 받을 곳(chat_id)이 정해지지 않았습니다."; return false; }
 
             string token = BotToken.Trim();
@@ -165,7 +165,7 @@ namespace RemoteControl
             who = "";
 
             string token = BotToken.Trim();
-            if (token.Length == 0) { LastError = "이 빌드에는 알림 봇이 들어 있지 않습니다."; return null; }
+            if (token.Length == 0) { LastError = "이 PC의 알림 봇 토큰이 설정되지 않았습니다."; return null; }
 
             string resp;
             if (!Post("https://api.telegram.org/bot" + token + "/getUpdates", "limit=100", out resp))

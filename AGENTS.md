@@ -1,4 +1,48 @@
-> GitHub 업로드 사본: 실제 텔레그램 봇 토큰은 제외했다. 현재 `Notify.BotToken`은 `REMOTE_CONTROL_TELEGRAM_BOT_TOKEN` 실행 환경 변수를 읽는다. 아래 소스 상수 방식과 PC 상태는 과거 기록이며, 기존 원본과 설치된 서비스를 변경한 것이 아니다.
+## Inno Setup / 텔레그램 입력 (v1.8.22)
+
+- 공개 `dist/RemoteControl_Setup.exe`는 `installer/RemoteControl.iss`의 Inno 마법사다. `RemoteControl_SetupEngine.exe`는 기존 설치·제거·웹/LAN 설정과 패키지 엔진이며, 중복 제거 등록을 만들지 않는다. 패키지/IL 회귀 검사는 엔진을 읽는다.
+- 토큰·chat_id는 선택 입력이며 빈 값은 기존 값을 보존한다. 명시 입력만 갱신한다. 토큰을 명령줄·설치 로그·공개 설치물에 넣지 않는다. Inno 입력은 관리자/SYSTEM 전용 임시 폴더로 전달하고 읽은 뒤 삭제한다.
+- 토큰 저장은 `TelegramCredentials.SaveTo`의 DPAPI·소유자/ACL 검사·원자적 교체를 사용한다. 환경 변수 충돌/손상/권한 오류를 미등록으로 취급하지 않는다.
+- 사용자가 명시적으로 요청한 개인용 PS1은 `tools/Export-TelegramToken.ps1`로 생성할 수 있다. 실제 토큰은 생성된 개인 파일에만 들어가며 소스/릴리스에는 포함하지 않는다. CMD는 해당 실행에만 RemoteSigned를 적용하고 영구 정책·그룹 정책을 변경하지 않는다.
+- `bench/Test-TelegramSetup.ps1`은 가짜 토큰으로 입력·선택 설치·암호화·충돌 보존·원자적 교체·권한 거부·입력란 마스킹을 검증한다. 실제 메시지는 전송하지 않는다.
+
+## 안전한 MCP 클라이언트 등록 (v1.8.21)
+
+- LAN 연결 복사 창은 Claude Code 안전 등록(PowerShell)을 기본 형식으로 사용한다. 서버명은 영문으로 시작하며 숫자만 있는 포트 표기는 거부한다.
+- 이름/URL/선택 콜백 포트는 별도 값과 인자 배열이다. /register 응답이나 오류 문자열을 client_id/서버명으로 재사용하지 않는다. 옵션은 모두 이름 앞에 위치한다.
+- 기존 설정 조회 오류를 미등록으로 취급하지 않는다. 동일 설정은 중복 등록하지 않고, 충돌은 자동 삭제/덮어쓰기 없이 중단한다. 모든 CLI 종료 코드와 등록 후 URL/HTTP 타입을 검증한다.
+- 인증 실패 시 임의 대체 등록/삭제/로그인을 이어서 실행하지 않는다. 스크립트 등록 완료는 OAuth 로그인 완료와 다르다.
+- 템플릿은 SetupLanMcp.cs의 SafeMcpRegistration.Template이며 tools/Register-RemoteControlMcp.ps1은 독립 배포본이다. 두 내용을 함께 유지하고 자동 시험에서 일치 여부를 확인한다.
+- 제공된 터널 주소의 구체값과 비밀은 AGENTS에 기록하지 않는다. 외부 에이전트가 래퍼를 우회한 직접 CLI 실행까지 이 서버가 차단할 수는 없다.
+
+## 시작 트레이 알림 제거 (v1.8.21)
+
+- MainForm의 자동 시작(--tray) 알림 예약 플래그와 AnnounceTray 호출을 제거한다. Windows 전체 알림 설정은 변경하지 않는다.
+- 트레이 아이콘/더블클릭 열기/접속자 상태, 수동 실행 창, 닫기·주소 복사 안내 및 오류/텔레그램 알림은 유지한다.
+- bench/Test-StartupQuiet.ps1에서 실행 파일 IL과 소스를 검사하고 Test-NotifyMessages.ps1에서 기존 텔레그램 메시지 회귀를 검사한다.
+- OAuth loopback(v1.8.20), 다중 IP/공개 CA 안내 및 보안 패키징 변경을 보존한다.
+
+## Claude Code OAuth loopback (v1.8.20)
+
+- 외부 WebMCP도 Claude Code의 HTTP localhost/127.0.0.1/[::1] callback을 허용한다. LAN은 계속 루프백 전용이며 CIMD fetch를 하지 않는다.
+- callbackName의 공식 웹 콜백과 로컬 콜백 분류를 등록/인증/복귀 경로가 함께 사용한다. 임의 redirect, 사설 IP, query/fragment/userinfo를 허용하지 않는다.
+- SDK의 루프백 포트 변경 검사는 유지하고 토큰 교환은 실제 인증 요청의 redirect_uri에 결합한다. PKCE S256, state, CSRF, client_id/resource 검증을 해제하지 않는다.
+- 회귀 검사는 web-mcp/test/native-oauth.test.mjs와 browser-login.test.mjs에 있으며 docs/oauth-loopback-1820.md를 참조한다.
+## 2026-10-15 Defender 조사 / v1.8.19
+
+- Sabsik 탐지의 실제 원인과 오탐 여부는 미확정이다. 과거 백신/평판 설명을 현재 실측 결론으로 인용하지 않는다.
+- Defender 예외 등록·비활성화·정의 롤백·격리 복원으로 우회하지 않는다. HomePC의 MAPSReporting=0과 실패한 클라우드 연결은 로컬 검사 한계이며, 조사 중 이 설정을 변경하지 않았다.
+- 봇 토큰을 소스·EXE·기본 설치 파일에 내장하지 않는다. 실행 환경 또는 PC별 DPAPI 저장소를 읽는다. 업데이트는 구버전 상수 메타데이터만 읽어 기존 토큰을 보존한다. 토큰 재발급·설정 초기화는 하지 않는다.
+- 다운로드는 build/dependencies.json의 공식 고정 해시, Node 발급자 서명, npm lockfile integrity를 검사한다. VDD는 고정 파일명/해시/서명만 허용한다. 디스크에 남은 임의 설치 스크립트 실행과 드라이버용 루트 인증서 추가를 되살리지 않는다.
+- Go 모듈을 빌드 중 tidy하지 않는다. 보안 분석을 위해 Go 심볼 표를 보존한다. build/Write-BuildManifest.ps1의 입력·출력·내장 리소스 해시 증빙을 유지한다.
+- 상세 및 원 신고 PC 증거 수집: docs/defender-investigation-20261015.md, bench/Collect-DefenderEvidence.ps1. 실제 신고 PC, 클라우드 판정, 독립된 깨끗한 Windows VM 설치 검증은 아직 필요하다.
+## LAN 다중 IP 및 연결 설정 복사 (v1.8.18)
+
+- LAN 설정은 기본 `mcp_lan_address`와 전체 `mcp_lan_addresses`를 보존한다. NIC 순서가 달라져도 저장한 기본 IP를 임의로 바꾸지 않는다. 실제 할당된 IPv4만 적용하고 서버 IP와 허용 클라이언트 CIDR을 구분한다.
+- 적용 성공 후에만 해당 설정 snapshot으로 연결 명령·JSON·TOML을 복사한다. CA URL은 `/ca/RemoteControl-LAN-CA.crt`, 표시 SHA256은 공개 PEM 파일 바이트의 SHA256이다. 비밀번호·개인 키·프록시 키는 안내에 포함하지 않는다.
+- `gateway.mjs`의 LAN `publicUrls`는 명시 Host만 허용하고 IP별 issuer/resource/OAuth·전송 상태를 분리한다. 기존 `data/auth-state.bin`, `clients.json`과 추가 `data/lan-origin-<SHA256(origin)>/` 저장소를 업데이트·재적용에서 보존한다.
+- Caddy는 각 IP의 `tls internal`과 실제 연결 local IP로 인증서를 선택한다. 공유 HTTPS에 기본 IP의 `default_sni`를 다시 넣으면 SNI 없는 다른 IP 클라이언트의 인증서가 어긋난다. CA 파일은 정확한 GET/HEAD 경로와 클라이언트 CIDR 검사 아래에서만 제공한다.
+- `web-mcp/test/lan-multi.test.mjs`는 IP별 OAuth·전송·기존 인증 유지·공유 제한을 검사한다. `bench/Test-LanWebMultiAddress.ps1`는 격리 loopback 두 IP의 엄격 no-SNI TLS·CA 파일/SHA256·공유 HTTPS를 검사한다. `bench/Test-LanConnection.ps1`는 실제 생성 설정과 성공/실패 상태를 검사한다. 프로덕션 NIC나 신뢰 저장소는 테스트를 위해 변경하지 않는다.
 
 ## 터널 주소 유지 및 알림 (v1.8.17)
 

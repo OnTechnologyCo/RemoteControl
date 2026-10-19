@@ -57,6 +57,14 @@ header_up -Forwarded
     });req.on('error',reject);req.end(body);
   });}
   let ready=false;for(let i=0;i<100;i++){try{ready=(await send('/')).status===200;if(ready)break;}catch{}await delay(100);}assert(ready);
+  // 외부 HTTPS 서버에도 Claude Code 형태의 DCR + HTTP loopback 복귀를 적용한다.
+  // 아래 브라우저 interception이 콜백을 소비하므로 인증 코드는 외부로 전송되지 않는다.
+  const nativeCallback='http://localhost:49555/callback';
+  const nativeRegistration=await send('/register',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({redirect_uris:[nativeCallback],token_endpoint_auth_method:'none',
+      grant_types:['authorization_code','refresh_token'],response_types:['code']})});
+  assert.equal(nativeRegistration.status,201,nativeRegistration.body);
+  hosts.push({id:JSON.parse(nativeRegistration.body).client_id,redirect:nativeCallback,name:'로컬 MCP 클라이언트'});
   const chrome=await browser(join(work,'profile'));t.after(()=>chrome.close());
   // This new browser profile is used only for the self-signed loopback fixture.
   await chrome.command('Security.setIgnoreCertificateErrors',{ignore:true});

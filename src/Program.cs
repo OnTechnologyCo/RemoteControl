@@ -88,7 +88,7 @@ namespace RemoteControl
 
         private bool startHidden;
 
-        private bool announce;
+
 
         private bool svcMode;          // 서비스가 돌고 있어 우리가 서버를 열지 않는 상태
 
@@ -300,7 +300,7 @@ namespace RemoteControl
 
         /// <summary>이 프로그램의 판 번호. 창 제목과 머리글에 보인다.</summary>
 
-        internal const string Version = "1.8.17";
+        internal const string Version = "1.8.22";
 
 
 
@@ -392,7 +392,7 @@ namespace RemoteControl
 
             tick.Interval = 1000;
 
-            tick.Tick += delegate { if (announce) { announce = false; AnnounceTray(); } UpdateStatus(); };
+            tick.Tick += delegate { UpdateStatus(); };
 
             tick.Start();
 
@@ -468,11 +468,7 @@ namespace RemoteControl
 
 
 
-                // 창이 안 뜨는 게 고장으로 보이지 않게 한 번 알려 준다.
-
-                // 여기서는 아직 창 손잡이가 없어 BeginInvoke 를 쓸 수 없다. 타이머에 맡긴다.
-
-                announce = true;
+                // 자동 시작은 알림 팝업 없이 트레이 아이콘과 상태 표시만 유지한다.
 
 
 
@@ -490,25 +486,6 @@ namespace RemoteControl
 
 
 
-        private void AnnounceTray()
-
-        {
-
-            try
-
-            {
-
-                string where = svcMode ? "서비스로 실행 중" : "http://" + LocalIp() + ":" + Config.Port + "/";
-
-                tray.ShowBalloonTip(4000, "원격제어 실행 중", where + "\r\n트레이 아이콘을 두 번 누르면 창이 열립니다.",
-
-                                    ToolTipIcon.Info);
-
-            }
-
-            catch { }
-
-        }
 
 
 
@@ -2722,3 +2699,4 @@ namespace RemoteControl
     }
 
 }
+

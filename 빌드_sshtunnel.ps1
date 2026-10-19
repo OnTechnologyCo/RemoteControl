@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 $module = Join-Path $root 'sshtunnel-client'
 $sdk = Join-Path (Split-Path -Parent $root) 'SSHTunnel\pkg\tunnel\tunnel.go'
@@ -8,9 +8,14 @@ $out = Join-Path $root 'dist\sshtunnel-client.exe'
 [void][IO.Directory]::CreateDirectory((Join-Path $root 'dist'))
 Push-Location $module
 try {
-    & go mod tidy
-    if ($LASTEXITCODE -ne 0) { throw 'SSHTunnel SDK dependency preparation failed' }
-    & go build -trimpath -ldflags '-s -w' -o $out .
+    # 로컬 replace SDK는 ziphash가 없으므로 각 원격 의존성만 검증한다.
+    $modules = @(& go list -mod=readonly -m -f '{{if not .Main}}{{if not .Replace}}{{.Path}}@{{.Version}}{{end}}{{end}}' all)
+    if ($LASTEXITCODE -ne 0) { throw 'SSHTunnel dependency listing failed' }
+    foreach ($dependency in $modules) {
+        if ($dependency) { & go mod download $dependency; if ($LASTEXITCODE -ne 0) { throw 'SSHTunnel dependency verification failed' } }
+    }
+    # 보안 분석기가 실제 포함 함수를 확인할 수 있도록 Go 심볼 표를 보존한다.
+    & go build -mod=readonly -trimpath -ldflags '-w' -o $out .
     if ($LASTEXITCODE -ne 0) { throw 'SSHTunnel client build failed' }
 } finally { Pop-Location }
 $inputFile = [IO.File]::OpenRead($out)

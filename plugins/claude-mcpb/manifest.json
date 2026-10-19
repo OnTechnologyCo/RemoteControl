@@ -4,7 +4,7 @@
 
   "name": "remotecontrol-lan",
 
-  "version": "1.8.17",
+  "version": "1.8.22",
 
   "display_name": "RemoteControl LAN",
 
@@ -57,3 +57,4 @@
   }
 
 }
+

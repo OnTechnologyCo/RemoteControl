@@ -4,10 +4,11 @@
 
   "name": "remotecontrol-lan",
 
-  "version": "1.8.17",
+  "version": "1.8.22",
 
   "description": "Inspect and deploy programs on offline LAN PCs using RemoteControl login.",
 
   "author": { "name": "ontech" }
 
 }
+

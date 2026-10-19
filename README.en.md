@@ -1,3 +1,6 @@
+## v1.8.22 Inno Setup and optional Telegram credentials
+
+The public `RemoteControl_Setup.exe` now uses an Inno Setup wizard. Choose the installation folder, screen port and startup/service options, then optionally enter a Telegram bot token and chat ID. Blank values preserve existing settings. Tokens are protected with Windows DPAPI on the target PC and are never embedded in the public installer or passed on the command line. Web/LAN MCP configuration remains available after installation. Existing uninstall registration and settings are preserved. See the [installation and token transfer guide](docs/setup-1822.md).
 ## v1.8.17 persistent tunnel addresses and device-aware notifications
 
 Requires SSHTunnel 1.5.0 or newer and uses a stable service identity across reconnects, helper restarts, and local port changes. Telegram notices identify the PC, RemoteControl login ID, relay device name, relay account and server, plus the previous and new URLs. Passwords and access keys are excluded. Keep both the client identity files and server reservations; switching Windows profiles or relay accounts can select a different identity. [Address persistence and notification details](docs/tunnel-address-notifications.md).
@@ -6,7 +9,7 @@ Requires SSHTunnel 1.5.0 or newer and uses a stable service identity across reco
 
 Enable the independent LAN settings to connect a local MCP client to `https://LAN_IP/mcp` on HTTPS 443. Import the target PC public CA once, then authenticate with the existing RemoteControl credentials using DCR and PKCE. Server authentication and file transfers require no internet, DDNS, or tunnel. An owned external HTTPS service can share the same port by routing domain and IP hosts separately. Cloud ChatGPT/Claude cannot directly reach private LAN IPs or run offline. [LAN guide](docs/webmcp-lan-offline.md).
 
-# RemoteControl v1.8.17
+# RemoteControl v1.8.22
 
 [한국어](README.md) | [English](README.en.md)
 

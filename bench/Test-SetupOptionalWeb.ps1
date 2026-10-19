@@ -1,7 +1,7 @@
 # ReadOptions/Validate/package extraction only; never invoke installation or HTTPS activation.
 $ErrorActionPreference='Stop'
 $root=Split-Path $PSScriptRoot
-$assembly=[Reflection.Assembly]::LoadFile((Join-Path $root 'dist\RemoteControl_Setup.exe'))
+$assembly=[Reflection.Assembly]::LoadFile((Join-Path $root 'dist\RemoteControl_SetupEngine.exe'))
 $static=[Reflection.BindingFlags]'Static,NonPublic'
 $instance=[Reflection.BindingFlags]'Instance,NonPublic'
 $web=$assembly.GetType('RemoteControlSetup.WebMcp',$true)

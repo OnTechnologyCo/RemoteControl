@@ -1,4 +1,4 @@
-# 설치는 관리자 PowerShell에서 명시적으로 실행한다. 빌드에서는 이 파일을 실행하지 않는다.
+﻿# 설치는 관리자 PowerShell에서 명시적으로 실행한다. 빌드에서는 이 파일을 실행하지 않는다.
 [CmdletBinding()]
 param(
     [Parameter(Mandatory=$true)][string]$PublicUrl,

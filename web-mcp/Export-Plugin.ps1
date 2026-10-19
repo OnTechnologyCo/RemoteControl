@@ -45,3 +45,4 @@ try {
 }finally{$zip.Dispose();$file.Dispose()}
 
 "검증된 웹 MCP 연결 패키지: $Destination"
+

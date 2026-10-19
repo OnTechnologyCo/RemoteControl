@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][ValidatePattern('^[A-Fa-f0-9]{64}$')][string]$ExpectedSha256)
+﻿param([Parameter(Mandatory=$true)][ValidatePattern('^[A-Fa-f0-9]{64}$')][string]$ExpectedSha256)
 # 대상 PC에서 확인한 지문을 필수로 받아 다른 CA의 오등록을 막는다.
 $ErrorActionPreference='Stop'
 $path=Join-Path $PSScriptRoot 'RemoteControl-LAN-CA.crt'

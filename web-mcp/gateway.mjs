@@ -1,9 +1,9 @@
 import express from 'express';
 import { rateLimit } from 'express-rate-limit';
-import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { request } from 'node:http';
 import { isIP } from 'node:net';
-import { existsSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import { AuthState } from './auth-state.mjs';
 import { attachTransfers, fileTool } from './transfers.mjs';
@@ -22,9 +22,14 @@ const CALLBACKS = new Map([...CLIENTS.values()].map(client => [client.callback, 
 const SCOPE = 'remotecontrol';
 const COOKIE = '__Host-rc-connect';
 const minute = 60000;
-// LAN OAuth는 클라이언트 PC의 루프백 콜백만 허용하며 인터넷 문서를 읽지 않는다.
+// 웹 OAuth는 공식 웹 콜백과 로컬 앱 콜백을 허용한다. LAN은 루프백만 허용하고 CIMD를 읽지 않는다.
 export function callbackName(uri, lan = false) {
-  if (!lan) return CALLBACKS.get(uri);
+  // 서버가 외부 HTTPS여도 Claude Code의 인증 완료 주소는 클라이언트 PC의 루프백이다.
+  if (!lan && CALLBACKS.has(uri)) return CALLBACKS.get(uri);
+  // 임의 도메인/사설 IP, userinfo, query, fragment, 변형 IP 표기와 제어 문자는 허용하지 않는다.
+  if (typeof uri !== 'string' || uri.length > 2048 ||
+      !/^http:\/\/(?:127\.0\.0\.1|localhost|\[::1\]):[1-9][0-9]{3,4}(?:\/[^?#]*)?$/.test(uri) ||
+      /[\u0000-\u0020\u007f\\]/.test(uri)) return undefined;
   try {
     const u = new URL(uri);
     if (u.protocol !== 'http:' || !['127.0.0.1','localhost','[::1]'].includes(u.hostname) || !u.port || Number(u.port) < 1024 || u.username || u.password || u.hash || u.search) return undefined;
@@ -55,11 +60,21 @@ const html = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'
 
 export function validateConfig(value) {
   const c = { ...value };
-  const u = new URL(c.publicUrl);
-  if (u.protocol !== 'https:' || u.pathname !== '/' || u.search || u.hash || u.username || u.password || (c.mode === 'lan' ? isIP(u.hostname) !== 4 : isIP(u.hostname)))
-    throw Error('publicUrl에는 경로 없는 HTTPS DDNS 주소를 지정하세요.');
-  c.publicUrl = u.origin;
-  if (c.mode === 'lan') c.networks = parseNetworks(c.allowedNetworks);
+  const origin = value => {
+    if (typeof value !== 'string') throw Error('공개 주소는 HTTPS 문자열이어야 합니다.');
+    const u = new URL(value);
+    if (u.protocol !== 'https:' || u.pathname !== '/' || u.search || u.hash || u.username || u.password || (c.mode === 'lan' ? isIP(u.hostname) !== 4 : isIP(u.hostname)))
+      throw Error(c.mode === 'lan' ? 'LAN 주소에는 경로 없는 HTTPS IPv4 주소를 지정하세요.' : 'publicUrl에는 경로 없는 HTTPS DDNS 주소를 지정하세요.');
+    return u.origin;
+  };
+  c.publicUrl = origin(c.publicUrl);
+  if (c.mode === 'lan') {
+    if (c.publicUrls !== undefined && (!Array.isArray(c.publicUrls) || c.publicUrls.length > 32)) throw Error('LAN 접속 주소는 최대 32개의 목록으로 지정하세요.');
+    // 기본 주소를 유지하고 명시적으로 선택한 IP만 추가한다. 요청 Host에서 주소를 만들지 않는다.
+    c.publicUrls = [...new Set([c.publicUrl, ...(c.publicUrls || []).map(origin)])];
+    if (c.publicUrls.length > 32) throw Error('LAN 접속 주소는 최대 32개까지 지정하세요.');
+    c.networks = parseNetworks(c.allowedNetworks);
+  }
   for (const k of ['listenPort', 'lanPort']) if (!Number.isInteger(c[k]) || c[k] < 1024 || c[k] > 65535) throw Error(k + ': 1024~65535 포트가 필요합니다.');
   if (c.lanPort === c.listenPort) throw Error('LAN MCP와 웹 중계 포트는 달라야 합니다.');
   if (!/^[A-Za-z0-9_-]{43}$/.test(c.proxyKey)) throw Error('설치 시 생성한 프록시 키가 필요합니다.');
@@ -178,6 +193,7 @@ class Provider {
   }
   async authorize(client, params, res) {
     this.sweep(); this.checkResource(params.resource); this.checkScopes(params.scopes);
+    if (!callbackName(params.redirectUri, this.config.mode === 'lan')) throw new InvalidRequestError('Supported callback required');
     if (!/^[A-Za-z0-9_-]{43}$/.test(params.codeChallenge) || !params.state || params.state.length > 1024)
       throw new InvalidRequestError('S256 challenge and state required');
     if (this.pending.size >= 128 || this.grants.size >= 64) throw new TemporarilyUnavailableError('Too many pending connections');
@@ -300,8 +316,52 @@ function loginPage(csrf, origin, clientName) {
 <form method="post" action="/connect"><input type="hidden" name="csrf" value="${html(csrf)}"><label>원격제어 아이디<input name="user" autocomplete="username" maxlength="128" required></label><label>비밀번호<input name="password" type="password" autocomplete="current-password" maxlength="1024" required></label><button name="decision" value="allow">로그인하고 연결</button><button name="decision" value="deny" formnovalidate>취소</button></form><p><small>비밀번호는 ${clientName}에 전달하거나 이 중계 프로그램에 저장하지 않습니다. 인증은 재시작 후에도 유지되며, 연결 해제 또는 비밀번호 변경 시 해제됩니다.</small></p></main></html>`;
 }
 
-export function createGateway(config, { directory, upstream, metadata = getClientMetadata, now = Date.now, audit = () => {} } = {}) {
-  const c = validateConfig(config), app = express();
+function gatewayLimits() {
+  let active = 0;
+  return {
+    requests: rateLimit({windowMs:minute, limit:600, keyGenerator:()=> 'gateway', standardHeaders:true, legacyHeaders:false}),
+    logins: rateLimit({windowMs:minute, limit:10, keyGenerator:()=> 'login', standardHeaders:true, legacyHeaders:false}),
+    concurrent: (req,res,next) => { if(active>=16)return res.status(503).send('Busy'); active++; let done=false; const release=()=>{if(!done){done=true;active--;}};res.once('finish',release);res.once('close',release);next(); }
+  };
+}
+
+export function createGateway(config, options = {}) {
+  const c = validateConfig(config), limits = gatewayLimits();
+  if (c.mode !== 'lan') return createOriginGateway(c, options, limits);
+  const {directory} = options, gateways = new Map();
+  const legacyFile = join(directory, 'auth-state.bin');
+  // 구버전의 기본 주소는 원래 파일을 계속 쓴다. 기본 IP를 바꾸거나 목록 순서를 바꿔도
+  // issuer가 같은 저장소를 찾으므로 기존 토큰을 다른 IP로 옮기거나 덮어쓰지 않는다.
+  const legacyOrigin = existsSync(legacyFile)
+    ? c.publicUrls.find(origin => new AuthState(directory, c.proxyKey, origin + '/').read() !== null)
+    : c.publicUrl;
+  try {
+    for (const origin of c.publicUrls) {
+      const storage = origin === legacyOrigin ? directory : join(directory, 'lan-origin-' + createHash('sha256').update(origin).digest('hex'));
+      if (storage !== directory) mkdirSync(storage, {recursive:true, mode:0o700});
+      const gateway = createOriginGateway({...c, publicUrl:origin}, {...options, directory:storage}, limits);
+      gateways.set(origin, gateway);
+      // 로그인 전에도 기본 파일의 소유 issuer를 남겨 다음 설정 변경에서 재사용한다.
+      if (origin === legacyOrigin && !existsSync(legacyFile)) gateway.provider.persist();
+    }
+  } catch (error) {
+    for (const gateway of gateways.values()) { try { gateway.close(); } catch {} }
+    throw error;
+  }
+  const primary = gateways.get(c.publicUrl), hosts = new Map([...gateways].map(([origin, gateway]) => [new URL(origin).host, gateway]));
+  const app = express();
+  app.disable('x-powered-by'); app.set('trust proxy', false); app.set('query parser', 'simple');
+  // 미등록 Host도 기본 gateway의 동일한 보안 검사와 감사 경로에서 거부한다.
+  app.use((req,res,next) => (hosts.get(req.headers.host) || primary).app(req,res,next));
+  return {app, provider:primary.provider, providers:new Map([...gateways].map(([origin,gateway]) => [origin,gateway.provider])), close:() => {
+    let failure;
+    for (const gateway of gateways.values()) { try { gateway.close(); } catch (error) { failure ||= error; } }
+    if (failure) throw failure;
+  }};
+}
+
+function createOriginGateway(c, { directory, upstream, metadata = getClientMetadata, now = Date.now, audit = () => {} } = {}, limits) {
+  const app = express();
   const provider = new Provider(c, directory, upstream || ((path, data) => lanRequest(c.lanPort, path, data)), metadata, now);
   const authOptions = { provider, issuerUrl: new URL(c.publicUrl), resourceServerUrl: new URL(provider.resource), scopesSupported: [SCOPE], resourceName: 'RemoteControl', clientRegistrationOptions: { clientSecretExpirySeconds: 0 } };
   const oauth = { ...createOAuthMetadata(authOptions), client_id_metadata_document_supported: c.mode !== 'lan', authorization_response_iss_parameter_supported: true };
@@ -332,9 +392,8 @@ export function createGateway(config, { directory, upstream, metadata = getClien
     next();
   });
   // 헤더 위조로 키를 늘릴 수 없는 전역 제한을 먼저 적용한다.
-  app.use(rateLimit({windowMs:minute, limit:600, keyGenerator:()=> 'gateway', standardHeaders:true, legacyHeaders:false}));
-  let active = 0;
-  app.use((req,res,next) => { if(active>=16)return res.status(503).send('Busy'); active++; let done=false; const release=()=>{if(!done){done=true;active--;}};res.once('finish',release);res.once('close',release);next(); });
+  app.use(limits.requests);
+  app.use(limits.concurrent);
   app.use((req, res, next) => {
     // SDK가 만드는 성공/오류 리디렉션 모두 같은 issuer를 명시해야 ChatGPT의 고정 callback을 쓸 수 있다.
     const original = res.redirect.bind(res);
@@ -344,7 +403,7 @@ export function createGateway(config, { directory, upstream, metadata = getClien
   app.get('/.well-known/oauth-authorization-server', (req,res)=>res.json(oauth));
   app.get(['/.well-known/oauth-protected-resource','/.well-known/oauth-protected-resource/mcp'], (req,res)=>res.json(resourceMetadata));
   app.get('/', (req,res)=>res.type('text').send('RemoteControl · WebMCP 연결 주소: ' + provider.resource));
-  app.post('/connect', rateLimit({windowMs:minute,limit:10,keyGenerator:()=> 'login',standardHeaders:true,legacyHeaders:false}), express.urlencoded({extended:false,limit:'8kb',parameterLimit:8}), (req,res,next)=>provider.login(req,res).catch(next));
+  app.post('/connect', limits.logins, express.urlencoded({extended:false,limit:'8kb',parameterLimit:8}), (req,res,next)=>provider.login(req,res).catch(next));
   // OAuth 요청과 MCP 요청은 본문 제한이 다르다. 인증 경로에서 큰 JSON을 먼저 읽지 않는다.
   app.use(['/authorize','/token','/register','/revoke'], express.urlencoded({extended:false,limit:'16kb',parameterLimit:20}), express.json({limit:'16kb'}));
   app.use('/token', (req, res, next) => {

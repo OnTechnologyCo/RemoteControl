@@ -1,0 +1,16 @@
+﻿{
+  "caddy": {
+    "version": "2.11.7",
+    "archiveSha256": "0a1edc0b799512051c57071ce0e798d3f2cf67dc98171366f1d2b326072e3b06"
+  },
+  "node": {
+    "version": "24.22.0",
+    "exeSha256": "ba93f9a70bd86fce3ebbb39ec758501458453467aa92a34a0a3602d1e3fc2b9c"
+  },
+  "vdd": {
+    "mttvdd.cat": "08a0093fc9b2e32b287a6f8a77ca4de0a31830d29fc33d2b13a918dc859468f6",
+    "MttVDD.dll": "c9ca837f57a98fbd43bc416a7f535a95843626e7759eaf85cf0cd7ce334dbb05",
+    "MttVDD.inf": "550d211fe481e74dfe3f9d724ed78be48b3a9113405965d683d9373e8d672f5d",
+    "vdd_settings.xml": "8d1bf91c91dcdc7f3ea35a05b89a33e573d4705a1f1627340ef7b01e197d81ec"
+  }
+}

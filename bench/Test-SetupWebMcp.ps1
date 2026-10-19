@@ -1,10 +1,10 @@
-# Setup의 Main/Install을 실행하지 않는다. 실제 EXE의 파일 배치 경로만 격리 폴더에서 호출한다.
+﻿# Setup의 Main/Install을 실행하지 않는다. 실제 EXE의 파일 배치 경로만 격리 폴더에서 호출한다.
 
 $ErrorActionPreference='Stop'
 
 $root=Split-Path -Parent $PSScriptRoot
 
-$setup=Join-Path $root 'dist\RemoteControl_Setup.exe'
+$setup=Join-Path $root 'dist\RemoteControl_SetupEngine.exe'
 
 $assembly=[Reflection.Assembly]::LoadFile($setup)
 
@@ -24,7 +24,7 @@ $dest=Join-Path $root ('artifacts\setup-web-test\'+[Guid]::NewGuid().ToString('N
 
 $version=(Get-Item -LiteralPath $setup).VersionInfo.FileVersion
 
-if($version -ne '1.8.15.0'){throw "예상하지 않은 Setup 버전: $version"}
+if($version -ne (Get-Item -LiteralPath (Join-Path $root 'dist\RemoteControl.exe')).VersionInfo.FileVersion){throw "Setup과 본체 버전 불일치: $version"}
 
 $resources=$assembly.GetManifestResourceNames()
 
@@ -97,7 +97,7 @@ $manifest=Read-ZipText $plugin 'remotecontrol-web/plugin.json' | ConvertFrom-Jso
 
 $mcp=Read-ZipText $plugin 'remotecontrol-web/mcp.json' | ConvertFrom-Json
 
-if($manifest.name -ne 'remotecontrol-web' -or $manifest.version -ne '1.8.15'){throw '웹 플러그인 ID/버전 불일치'}
+if($manifest.name -ne 'remotecontrol-web' -or $manifest.version -ne ($version -replace '\.0$','')){throw '웹 플러그인 ID/버전 불일치'}
 
 if($mcp.mcpServers.'remotecontrol-web'.type -ne 'streamable-http' -or $mcp.mcpServers.'remotecontrol-web'.url -cne 'https://najhna.dyndns.org:59334/mcp'){throw '웹 MCP 연결 정보 불일치'}
 
@@ -170,3 +170,4 @@ $report=[ordered]@{Setup=$setup;Version=$version;SetupSha256=(Get-FileHash -Lite
 $report | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $dest 'verification.json') -Encoding UTF8
 
 $report | ConvertTo-Json
+

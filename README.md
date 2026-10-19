@@ -1,25 +1,18 @@
-## v1.8.17 터널 주소 유지 및 PC·계정 알림
+# 원격제어 v1.8.22
 
-SSHTunnel 1.5.0 이상과 고정 서비스 식별자를 사용해 재접속·helper 재시작·로컬 포트 변경 뒤 같은 주소를 재사용합니다. 텔레그램 알림에는 PC 이름, 원격제어 로그인 ID, 터널 장비명·계정·서버, 이전/변경 주소를 표시합니다. 비밀번호와 인증키는 포함하지 않습니다. [주소 변경 원인·유지 조건·알림 안내](docs/tunnel-address-notifications.md).
+## v1.8.22 Inno Setup 및 텔레그램 토큰 입력
 
-## v1.8.15 LAN IP / 폐쇄망 WebMCP
+`dist\RemoteControl_Setup.exe`는 Inno Setup 마법사입니다. 설치 경로·화면 포트·자동 실행·방화벽·가상 모니터를 선택하고, 선택 사항인 **텔레그램 알림** 단계에서 봇 토큰과 chat_id를 입력할 수 있습니다. 비워 두면 기존 값이 유지됩니다. 웹/LAN MCP 설정은 설치 완료 화면 또는 본체의 **LLM / MCP 설정**에서 열 수 있습니다.
 
-**LLM / MCP 설정 → LAN / 내부망 설정**에서 대상 PC의 IP와 허용 대역을 지정하면 기본 443의 `https://LAN_IP/mcp`로 연결합니다. 공개 CA를 클라이언트 PC에 최초 1회 등록한 뒤 로컬 MCP 클라이언트에서 기존 ID·비밀번호로 로그인합니다. 인터넷·DDNS·터널 없이 서버 인증과 파일 전송을 사용하며, 외부 WebMCP와 같은 443을 사용하면 소유 HTTPS 서비스에서 도메인/IP를 분기합니다. [사용법](docs/webmcp-lan-offline.md). 클라우드 ChatGPT/Claude의 사설 IP 직접 연결 또는 오프라인 모델 실행을 의미하지 않습니다.
+공개 설치 파일에는 실제 봇 토큰이 없습니다. 입력한 토큰은 대상 PC의 DPAPI 저장소에 암호화하며 명령줄·설치 로그에 넣지 않습니다. 기존 설치 엔진과 제거 등록을 유지하여 중복 프로그램 항목을 만들지 않습니다. [설치·개인용 토큰 이전 안내](docs/setup-1822.md).
 
-# RemoteControl v1.8.17
+## v1.8.18 LAN WebMCP 다중 IP·연결 설정 복사
 
-[한국어](README.md) | [English](README.en.md)
+**LLM / MCP 설정 → LAN / 내부망 설정**에서 랜카드별 IPv4를 확인하고 기본·추가 접속 IP를 등록합니다. 적용 후 사용할 IP를 선택하면 Claude Code 명령, VS Code JSON, Cursor JSON, Codex 명령·TOML을 복사할 수 있습니다. 전체 연결 안내에는 MCP·인증 주소, 공개 CA 다운로드 주소와 실제 CA 파일의 SHA256을 포함합니다.
 
-## v1.8.14 프라이빗 터널 MCP
+각 IP는 자신의 HTTPS/OAuth 주소로 연결되며, 기존 주소의 인증 상태와 공개 CA는 유지됩니다. [설정·CA 등록·클라이언트 예제](docs/webmcp-lan-offline.md).
 
-**웹 ChatGPT / Claude 설정 → 프라이빗 터널 주소 자동 연결**을 선택하면 SSHTunnel이 발급한 HTTPS 주소에서 화면과 MCP를 함께 사용할 수 있습니다. `/mcp`·OAuth·파일 전송 경로는 별도 loopback 인증 중계로 연결합니다. 직접 입력한 DDNS 주소와 기존 화면 연결 설정을 보존합니다.
-
-발급 주소가 같으면 재시작 뒤 인증을 복원합니다. 식별키 변경 등으로 실제 공개 주소가 바뀌면 앱에 새 `/mcp` 주소를 등록하고 다시 로그인해야 합니다. [웹 MCP 설정](web-mcp/README.md)과 [프라이빗 터널 사용법](docs/private-tunnel.md)을 참조하세요.
-
-SSHTunnel Go SDK 소스는 형제 폴더 `..\SSHTunnel`에 준비합니다. `빌드_sshtunnel.ps1`은 전용 helper를 빌드하며 본체 빌드가 이를 포함합니다.
-
-
-## v1.8.13 WebMCP 파일·폴더 전송
+## v1.8.14 WebMCP 파일·폴더 전송
 
 로컬·외부 LLM은 같은 HTTPS `/mcp` 주소를 사용합니다. LLM PC에 별도 연결기를 설치하지 않습니다. **LLM / MCP 설정 → WebMCP 주소 복사**로 등록 주소를 복사하고 기존 Remote ID/PW로 로그인합니다.
 
@@ -60,7 +53,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\빌드_setup.ps1
 
 본체만 만들 때는 `빌드.ps1`을 사용합니다. setup 빌드는 항상 현재 소스를 먼저 빌드한 뒤 그 본체를 포함하며, 본체와 setup의 버전이 다르면 실패합니다. 어느 폴더에서 스크립트를 실행해도 출력은 프로젝트의 `dist`로 고정합니다.
 
-기본 setup에는 Tailscale 인증 키와 알림 받을 chat_id를 넣지 않습니다. 기존 키를 포함할 때만 `-IncludeTailscaleKey`를 명시합니다. `-NoKey`는 이전 명령 호환용이며 기본 동작과 같습니다. 이 저장소의 봇 토큰은 실행 환경 변수 `REMOTE_CONTROL_TELEGRAM_BOT_TOKEN`으로 별도 제공하며 소스·설치 파일에 내장하지 않습니다.
+기본 setup에는 Tailscale 인증 키·chat_id·봇 토큰을 넣지 않습니다. 기존 Tailscale 키와 chat_id를 포함할 때만 `-IncludeTailscaleKey`를 명시합니다. 봇 토큰은 이 옵션으로도 포함하지 않습니다. `-NoKey`는 이전 명령 호환용이며 기본 동작과 같습니다. 빌드에는 Inno Setup 6이 필요합니다.
 
 빌드는 설치된 서비스를 중지하지 않으며 관리자 권한도 요구하지 않습니다. `dist`의 파일을 직접 실행 중이어서 덮어쓸 수 없으면 그 실행본을 종료한 뒤 다시 빌드하세요.
 
@@ -77,11 +70,3 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\빌드_setup.ps1
 새 버전의 **외부망 → 연결 설정**에서 연결 방식과 SSH 주소·포트를 지정합니다. 아직 값이 정해지지 않았다면 자동 연결을 끄고 빈 설정을 저장할 수 있습니다.
 
 `src`, `web`, `bench`, `docs`, `vdd`는 원본 및 시험 코드입니다. `artifacts`는 시험 결과 전용이며 배포 파일을 두지 않습니다.
-
-## GitHub 비공개 업로드 사본
-
-이 저장소는 기존 로컬 프로젝트에서 소스·문서·아이콘·빌드 스크립트·시험 코드만 추린 사본입니다. 실제 설정·키·접속 로그·브라우저 프로필·시험 결과·컴파일된 배포물은 제외했습니다. 기존 원본과 실행 중인 서비스는 변경하지 않았습니다.
-
-소스에 내장되어 있던 텔레그램 봇 토큰은 제외했습니다. 이 사본의 `Notify.BotToken`은 `REMOTE_CONTROL_TELEGRAM_BOT_TOKEN` 환경 변수에서 값을 읽습니다. 값이 없으면 봇 알림을 사용하지 않습니다. 직접 실행하는 프로그램은 실행 전에 해당 환경에 값을 제공하고, 서비스·대리 프로세스는 각 실행 환경에서 값을 받을 수 있어야 합니다. 사용자 셸에만 설정해도 이미 실행 중인 서비스에는 반영되지 않습니다. 실제 값은 Git에 올리지 마세요.
-
-`vdd`에는 드라이버 메타데이터만 포함합니다. 가상 디스플레이 설치를 사용하려면 일치하는 서명 드라이버 파일을 별도로 준비해야 합니다. `AGENTS.md`와 문서의 과거 측정·운영 기록은 이번 업로드에서 재측정한 결과가 아닙니다.

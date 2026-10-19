@@ -82,7 +82,7 @@ namespace RemoteControlSetup
 
         internal const string Product = "원격제어";
 
-        internal const string Version = "1.8.17";
+        internal const string Version = "1.8.22";
 
         internal const string ExeName = "RemoteControl.exe";
 
@@ -760,12 +760,14 @@ namespace RemoteControlSetup
 
         internal bool LanWebMcp;
         internal string LanAddress, LanNetworks;
+        internal string LanAdditionalAddresses = "";
         internal int LanHttpsPort=443, LanGatewayPort=59338;
         internal bool WebMcp;
         internal string WebUrl;
         internal bool WebTailscale, WebPrivate;
         internal int WebPublicPort=443, WebGatewayPort=59335;
         internal string CertificatePath, PrivateKeyPath;
+        internal string TelegramToken = "", TelegramChatId = "";
 
     }
 
@@ -785,6 +787,7 @@ namespace RemoteControlSetup
 
             WebMcp.Validate(o);
             LanWebMcp.Validate(o);
+            ValidateTelegram(o);
 
             say("폴더를 만듭니다: " + o.Dir);
 
@@ -796,6 +799,14 @@ namespace RemoteControlSetup
             WebMcp.ExtractPackages(o.Dir, o.WebMcp && !o.WebTailscale && !o.WebPrivate ? o.WebUrl : null);
             WebMcp.Preflight(o, say);
             LanWebMcp.Preflight(o, say);
+
+            if (string.IsNullOrWhiteSpace(o.TelegramToken))
+                RemoteControlSecrets.TelegramCredentials.PreserveFrom(Path.Combine(o.Dir, App.ExeName));
+            else {
+                RemoteControlSecrets.TelegramCredentials.Save(o.TelegramToken);
+                say("텔레그램 봇 토큰을 이 PC에 암호화하여 저장했습니다.");
+                o.TelegramToken = "";
+            }
 
             say("원격제어를 멈춥니다…");
 
@@ -1050,6 +1061,17 @@ namespace RemoteControlSetup
 
         /// </summary>
 
+        internal static void ValidateTelegram(Options o)
+        {
+            if (!string.IsNullOrWhiteSpace(o.TelegramToken)) {
+                o.TelegramToken = RemoteControlSecrets.TelegramCredentials.ValidateToken(o.TelegramToken);
+                RemoteControlSecrets.TelegramCredentials.CheckEnvironment(o.TelegramToken);
+            }
+            o.TelegramChatId = (o.TelegramChatId ?? "").Trim();
+            if (o.TelegramChatId.Length > 0 && !System.Text.RegularExpressions.Regex.IsMatch(o.TelegramChatId, @"\A-?[0-9]{1,20}\z"))
+                throw new ArgumentException("텔레그램 chat_id는 숫자로 입력하세요. 비워 두면 기존 설정을 유지합니다.");
+        }
+
         private static void PrepareDataDir(Say say)
 
         {
@@ -1108,7 +1130,7 @@ namespace RemoteControlSetup
 
         ///   tskey   Tailscale 인증 키
 
-        ///   tgchat  텔레그램 알림을 받을 곳 (봇 토큰은 프로그램 안에 박혀 있다)
+        ///   tgchat  텔레그램 알림을 받을 곳 (봇 토큰은 PC별 암호화 저장소에 별도 보관)
 
         ///
 
@@ -1337,6 +1359,7 @@ namespace RemoteControlSetup
                         // 포트는 새로 쓴다.
 
                         if (t.StartsWith("port=", StringComparison.OrdinalIgnoreCase)) continue;
+                        if (o.TelegramChatId.Length > 0 && (t.StartsWith("tgchat=", StringComparison.OrdinalIgnoreCase) || t.StartsWith("tgoff=", StringComparison.OrdinalIgnoreCase))) continue;
 
                         if ((o.WebMcp || o.LanWebMcp) && t.StartsWith("mcp_enabled=", StringComparison.OrdinalIgnoreCase)) continue;
                         if (o.WebMcp && !o.WebTailscale && !o.WebPrivate && t.StartsWith("mcp_web_url=", StringComparison.OrdinalIgnoreCase)) continue;
@@ -1375,6 +1398,7 @@ namespace RemoteControlSetup
 
 
                 lines.Add("port=" + o.Port);
+                if (o.TelegramChatId.Length > 0) { lines.Add("tgchat=" + o.TelegramChatId); lines.Add("tgoff=0"); hasTg=true; }
 
                 if(o.LanWebMcp && !o.WebMcp)lines.Add("mcp_enabled=1");
                 if (o.WebMcp) { lines.Add("mcp_enabled=1"); if(!o.WebTailscale && !o.WebPrivate)lines.Add("mcp_web_url=" + WebMcp.NormalizeUrl(o.WebUrl)); }
@@ -1422,7 +1446,7 @@ namespace RemoteControlSetup
 
 
 
-                // 알림 받을 곳만 옮긴다. 봇 토큰은 프로그램 안에 박혀 있어서 옮길 것이 없다.
+                // 배포 preset에는 알림 받을 곳만 있다. 토큰은 PC별로 별도 저장한다.
 
                 string chat = Val(preset, "tgchat");
 
@@ -1446,7 +1470,7 @@ namespace RemoteControlSetup
 
             }
 
-            catch (Exception ex) { if (o.WebMcp) throw; say("  키를 넣지 못했습니다: " + ex.Message); }
+            catch (Exception ex) { if (o.WebMcp || o.TelegramChatId.Length > 0) throw; say("  키를 넣지 못했습니다: " + ex.Message); }
 
         }
 
@@ -1570,97 +1594,8 @@ namespace RemoteControlSetup
 
 
 
-                // 어떤 드라이버를 넣었는지에 따라 설치 방법이 다르다.
-
-                // 종류를 미리 정해 두면 다른 걸 쓰고 싶을 때 코드를 고쳐야 한다.
-
-                // 폴더에 뭐가 들었는지 보고 알아서 고른다.
-
-
-
-                // 1) 자체 설치 프로그램이 있으면 그것에 맡긴다 (alluno-vdd 등).
-
-                foreach (string name in new string[] { "install.bat", "install.cmd",
-
-                                                       "Installer.exe", "AllunoVDDInstaller.exe" })
-
-                {
-
-                    string p = Path.Combine(vdd, name);
-
-                    if (!File.Exists(p)) continue;
-
-
-
-                    say("  " + name + " 으로 설치합니다…");
-
-                    say("  " + Squash(RunIn(vdd, p, "install")));
-
-                    say("  설치했습니다. 잠시 뒤 1920x1080 으로 맞춰집니다.");
-
-                    return;
-
-                }
-
-
-
-                // 2) usbmmidd 방식 (deviceinstaller + enableidd).
-
-                string di = Path.Combine(vdd, "deviceinstaller64.exe");
-
-                if (!File.Exists(di)) di = Path.Combine(vdd, "deviceinstaller.exe");
-
-
-
-                if (File.Exists(di))
-
-                {
-
-                    say("  " + Squash(RunIn(vdd, di, "install usbmmidd.inf usbmmidd")));
-
-                    say("  " + Squash(RunIn(vdd, di, "enableidd 1")));
-
-                    say("  가상 모니터를 켰습니다. 잠시 뒤 1920x1080 으로 맞춰집니다.");
-
-                    return;
-
-                }
-
-
-
-                // 3) inf 만 있으면 윈도우 기본 도구로 넣는다.
-
-                string[] infs = Directory.GetFiles(vdd, "*.inf");
-
-                if (infs.Length == 0)
-
-                {
-
-                    say("  드라이버를 알아보지 못했습니다. vdd 폴더 내용을 확인하세요.");
-
-                    return;
-
-                }
-
-
-
-                // 같이 들어 있는 인증서가 있으면 먼저 넣는다 (자체 서명 드라이버용).
-
-                // 정식 서명된 드라이버에는 없다.
-
-                foreach (string cer in Directory.GetFiles(vdd, "*.cer"))
-
-                {
-
-                    RunIn(vdd, "certutil", "-addstore -f Root \"" + cer + "\"");
-
-                    RunIn(vdd, "certutil", "-addstore -f TrustedPublisher \"" + cer + "\"");
-
-                    say("  인증서를 넣었습니다: " + Path.GetFileName(cer));
-
-                }
-
-
+                // 과거 폴더의 설치 스크립트 실행이나 루트 인증서 추가로 서명 검사를 우회하지 않는다.
+                string[] infs = new string[] { Vdd.PayloadInf(vdd) };
 
                 // 설정 파일은 드라이버가 정해진 자리에서 읽는다.
 
@@ -1754,45 +1689,7 @@ namespace RemoteControlSetup
 
 
 
-                foreach (string name in new string[] { "uninstall.bat", "uninstall.cmd",
-
-                                                       "Installer.exe", "AllunoVDDInstaller.exe" })
-
-                {
-
-                    string p = Path.Combine(vdd, name);
-
-                    if (!File.Exists(p)) continue;
-
-
-
-                    RunIn(vdd, p, "uninstall");
-
-                    return;
-
-                }
-
-
-
-                string di = Path.Combine(vdd, "deviceinstaller64.exe");
-
-                if (!File.Exists(di)) di = Path.Combine(vdd, "deviceinstaller.exe");
-
-
-
-                if (File.Exists(di))
-
-                {
-
-                    RunIn(vdd, di, "enableidd 0");
-
-                    RunIn(vdd, di, "remove usbmmidd");
-
-                    return;
-
-                }
-
-
+                // 제거도 자체 SetupAPI 경로만 쓴다. 디스크에 남은 외부 설치기는 실행하지 않는다.
 
                 // 장치부터 뗀다. 장치가 붙어 있으면 드라이버가 안 지워진다.
 
@@ -2142,7 +2039,7 @@ namespace RemoteControlSetup
     internal sealed class SetupForm : InstallerForm
     {
 
-        private TextBox txtDir;
+        private TextBox txtDir, txtTelegramToken;
 
         private CheckBox chkLock, chkRun, chkFw, chkDesk, chkVdd;
         private WebConnectionControls webConnection;
@@ -2331,6 +2228,12 @@ namespace RemoteControlSetup
 
 
 
+            Row(Ui.Text("텔레그램 봇 토큰 (선택)", 9, FontStyle.Bold, Color.White, 0, 0, 0));
+            txtTelegramToken = new TextBox { Name="TelegramBotToken", UseSystemPasswordChar=true, MaxLength=256,
+                BackColor=Ui.Input, ForeColor=Color.White, BorderStyle=BorderStyle.FixedSingle, Font=Ui.F(9,FontStyle.Regular) };
+            Row(txtTelegramToken);
+            Row(Ui.Text("비워 두면 기존 토큰을 유지합니다. 입력한 토큰은 이 PC에 암호화하여 저장합니다.\n알림 받을 chat_id는 설치 후 [알림 설정]에서 지정할 수 있습니다.", 8.5f, FontStyle.Regular, Ui.Sub, 0, 0, 0));
+
             webConnection = new WebConnectionControls(Row, true);
             lanConnection = new LanConnectionControls(Row, true);
 
@@ -2443,9 +2346,11 @@ namespace RemoteControlSetup
 
                 Port = (int)numPort.Value,
 
-                VirtualDisplay = chkVdd.Checked
+                VirtualDisplay = chkVdd.Checked,
+                TelegramToken = txtTelegramToken.Text.Trim()
             };
             if (string.IsNullOrEmpty(o.Dir)) throw new ArgumentException("설치 위치를 정해 주세요.");
+            Installer.ValidateTelegram(o);
             webConnection.Apply(o);
             lanConnection.Apply(o);
             WebMcp.Validate(o);
@@ -2461,6 +2366,7 @@ namespace RemoteControlSetup
 
             btnGo.Enabled = false;
             btnBrowse.Enabled = false;
+            txtTelegramToken.Enabled = false;
             webConnection.SetBusy(true);lanConnection.SetBusy(true);
             bar.Visible = true;
 
@@ -2494,20 +2400,24 @@ namespace RemoteControlSetup
 
                         btnGo.Enabled = true;
                         btnBrowse.Enabled = true;
+                        txtTelegramToken.Enabled = true;
                         webConnection.SetBusy(false);lanConnection.SetBusy(false);
 
 
-                        if (!ok) return;
+                        if (!ok) { lanConnection.ApplyFailed(); return; }
 
 
 
                         btnGo.Text = "실행";
 
                         installed = true;
+                        txtTelegramToken.Clear();
 
                         txtDir.ReadOnly = true;
 
                         btnBrowse.Enabled = false;
+
+                        lanConnection.Applied(o);
 
                     });
 
@@ -2689,6 +2599,98 @@ namespace RemoteControlSetup
 
 
 
+    // Inno 마법사와 설치 엔진 사이의 짧은 수명 입력. 토큰을 프로세스 인자/로그로 넘기지 않는다.
+    internal static class SetupBridge
+    {
+        internal static Options Parse(string text)
+        {
+            var values = new Dictionary<string,string>(StringComparer.Ordinal);
+            foreach (string line in text.Split(new[] {'\r','\n'}, StringSplitOptions.RemoveEmptyEntries)) {
+                int at=line.IndexOf('=');
+                if(at<1)throw new IOException("설치 입력 형식이 올바르지 않습니다.");
+                string name=line.Substring(0,at);
+                if(Array.IndexOf(new[]{"Version","Dir","Port","LockScreen","AutoRun","Firewall","Desktop","VirtualDisplay","TelegramToken","TelegramChatId"},name)<0 || values.ContainsKey(name))
+                    throw new IOException("설치 입력 항목을 확인할 수 없습니다.");
+                values.Add(name,line.Substring(at+1));
+            }
+            string version; if(!values.TryGetValue("Version",out version)||version!="1")throw new IOException("설치 입력 버전 오류.");
+            var o=new Options();
+            string value;
+            if(!values.TryGetValue("Dir",out value)||string.IsNullOrWhiteSpace(value)||!Path.IsPathRooted(value))throw new IOException("설치 경로를 확인하세요.");
+            o.Dir=Path.GetFullPath(value);
+            if(!values.TryGetValue("Port",out value)||!int.TryParse(value,out o.Port)||o.Port<1||o.Port>65535)throw new IOException("접속 포트는 1~65535여야 합니다.");
+            o.LockScreen=Flag(values,"LockScreen"); o.AutoRun=Flag(values,"AutoRun");
+            o.Firewall=Flag(values,"Firewall"); o.Desktop=Flag(values,"Desktop"); o.VirtualDisplay=Flag(values,"VirtualDisplay");
+            if(values.TryGetValue("TelegramToken",out value))o.TelegramToken=value;
+            if(values.TryGetValue("TelegramChatId",out value))o.TelegramChatId=value;
+            Installer.ValidateTelegram(o);
+            return o;
+        }
+        private static bool Flag(Dictionary<string,string> values,string name)
+        {
+            string value;if(!values.TryGetValue(name,out value)||(value!="0"&&value!="1"))throw new IOException("설치 옵션을 확인하세요.");return value=="1";
+        }
+        private static void SafePath(string path)
+        {
+            for(string part=Path.GetFullPath(path);part!=null;part=Path.GetDirectoryName(part))
+                if((File.Exists(part)||Directory.Exists(part))&&(File.GetAttributes(part)&FileAttributes.ReparsePoint)!=0)throw new IOException("설치 입력 경로에 링크를 사용할 수 없습니다.");
+        }
+        private static void PrivateDirectory(string path,bool create)
+        {
+            path=Path.GetFullPath(path);SafePath(path);
+            if(Path.GetFileName(path)!="rc-install-options")throw new IOException("설치 입력 경로 오류.");
+            if(create) {
+                if(Directory.Exists(path)||File.Exists(path))throw new IOException("설치 입력 폴더가 이미 존재합니다.");
+                var acl=new System.Security.AccessControl.DirectorySecurity();
+                var admins=new System.Security.Principal.SecurityIdentifier(System.Security.Principal.WellKnownSidType.BuiltinAdministratorsSid,null);
+                acl.SetOwner(admins);acl.SetAccessRuleProtection(true,false);
+                foreach(var sid in new[]{admins,new System.Security.Principal.SecurityIdentifier(System.Security.Principal.WellKnownSidType.LocalSystemSid,null)})
+                    acl.AddAccessRule(new System.Security.AccessControl.FileSystemAccessRule(sid,System.Security.AccessControl.FileSystemRights.FullControl,
+                        System.Security.AccessControl.InheritanceFlags.ContainerInherit|System.Security.AccessControl.InheritanceFlags.ObjectInherit,
+                        System.Security.AccessControl.PropagationFlags.None,System.Security.AccessControl.AccessControlType.Allow));
+                Directory.CreateDirectory(path,acl);
+            }
+            AssertPrivate(Directory.GetAccessControl(path));
+        }
+        private static void AssertPrivate(System.Security.AccessControl.FileSystemSecurity acl)
+        {
+            var owner=acl.GetOwner(typeof(System.Security.Principal.SecurityIdentifier)) as System.Security.Principal.SecurityIdentifier;
+            if(!Trusted(owner)||!acl.AreAccessRulesProtected && acl is System.Security.AccessControl.DirectorySecurity)throw new IOException("설치 입력 폴더 권한 오류.");
+            foreach(System.Security.AccessControl.FileSystemAccessRule rule in acl.GetAccessRules(true,true,typeof(System.Security.Principal.SecurityIdentifier)))
+                if(rule.AccessControlType==System.Security.AccessControl.AccessControlType.Allow && !Trusted(rule.IdentityReference as System.Security.Principal.SecurityIdentifier))throw new IOException("설치 입력 파일이 다른 사용자에게 공개되어 있습니다.");
+        }
+        private static bool Trusted(System.Security.Principal.SecurityIdentifier sid)
+        {return sid!=null&&(sid.IsWellKnown(System.Security.Principal.WellKnownSidType.BuiltinAdministratorsSid)||sid.IsWellKnown(System.Security.Principal.WellKnownSidType.LocalSystemSid));}
+        internal static bool TryRun(string[] args,out int result)
+        {
+            result=0;
+            if(args.Length<2||(args[1]!="/prepare-options"&&args[1]!="/install-options"&&args[1]!="/validate-options"))return false;
+            if(args.Length!=3||!Sys.IsAdmin()){result=5;return true;}
+            string folder=null,secret="";
+            try {
+                if(args[1]=="/prepare-options"){PrivateDirectory(args[2],true);return true;}
+                string file=Path.GetFullPath(args[2]);folder=Path.GetDirectoryName(file);
+                PrivateDirectory(folder,false);SafePath(file);
+                if(Path.GetFileName(file)!="install.options"||new FileInfo(file).Length>65536)throw new IOException("설치 입력 파일 오류.");
+                AssertPrivate(File.GetAccessControl(file));
+                Options o;
+                try { o=Parse(File.ReadAllText(file,Encoding.UTF8)); }
+                finally {File.Delete(file);}
+                secret=o.TelegramToken;
+                if(args[1]=="/install-options")new Installer().Install(o,delegate(string message) {
+                    File.AppendAllText(Path.Combine(folder,"result.txt"),message+Environment.NewLine,Encoding.UTF8);
+                });
+                else File.WriteAllText(Path.Combine(folder,"result.txt"),"설치 입력 검증 완료. 시스템 변경 없음.",Encoding.UTF8);
+                o.TelegramToken="";
+            } catch(Exception error) {
+                result=1;
+                // 검증된 전용 폴더에만 결과를 쓰며 비밀을 출력하지 않는다.
+                try {if(folder!=null){PrivateDirectory(folder,false);string message=error.Message;if(secret.Length>0)message=message.Replace(secret,"[토큰]");File.AppendAllText(Path.Combine(folder,"result.txt"),"실패: "+message,Encoding.UTF8);}}catch{}
+            }
+            return true;
+        }
+    }
+
     internal static class Program
 
     {
@@ -2698,6 +2700,10 @@ namespace RemoteControlSetup
         internal static int Main()
 
         {
+
+            // Inno에서 호출하는 비대화형 경로는 별도 UI/재승격을 만들지 않는다.
+            int bridgeResult;
+            if (SetupBridge.TryRun(Environment.GetCommandLineArgs(), out bridgeResult)) return bridgeResult;
 
             // 서비스를 등록하고 Program Files 에 쓰려면 관리자 권한이 필요하다.
 

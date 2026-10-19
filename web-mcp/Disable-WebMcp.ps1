@@ -1,4 +1,4 @@
-# 파일/인증서는 보존한다. 설치 상태를 다시 확인할 수 있게 자동 실행만 중지한다.
+﻿# 파일/인증서는 보존한다. 설치 상태를 다시 확인할 수 있게 자동 실행만 중지한다.
 [CmdletBinding()]
 param()
 $ErrorActionPreference = 'Stop'

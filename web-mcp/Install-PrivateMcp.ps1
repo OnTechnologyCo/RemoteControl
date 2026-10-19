@@ -1,4 +1,4 @@
-# Dedicated loopback gateway only. Does not change Caddy, DDNS, router or other services.
+﻿# Dedicated loopback gateway only. Does not change Caddy, DDNS, router or other services.
 [CmdletBinding()]
 param([ValidateRange(1024,65535)][int]$GatewayPort=59336,[ValidateRange(1024,65535)][int]$LanPort=5901,[switch]$CheckOnly)
 $ErrorActionPreference='Stop'

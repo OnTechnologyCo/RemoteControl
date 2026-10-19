@@ -1,4 +1,4 @@
-$ErrorActionPreference='Stop'
+﻿$ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'LanWebMcpConfig.ps1')
 $appDir=Join-Path $env:ProgramFiles 'RemoteControlLanWebMcp'
 $stateDir=Join-Path $env:ProgramData 'RemoteControlLanWebMcp'

@@ -1,4 +1,4 @@
-param([switch]$BuiltSetup)
+﻿param([switch]$BuiltSetup)
 $ErrorActionPreference='Stop'
 $root=Split-Path $PSScriptRoot
 $dest=Join-Path $root ('artifacts\setup-layout-test\'+[Guid]::NewGuid().ToString('N'))
@@ -15,11 +15,11 @@ $manifest=Join-Path $dest 'test.manifest'
   </windowsSettings></application>
 </assembly>
 '@ | Set-Content -LiteralPath $manifest -Encoding UTF8
-$sources=@('Setup.cs','SetupLayout.cs','SetupWebForm.cs','SetupLanMcp.cs','SetupLanForm.cs','SetupVdd.cs','SetupWebMcp.cs','bench\SetupLayoutTest.cs')|ForEach-Object {Join-Path $root $_}
-& $csc /nologo /target:exe /platform:x64 /langversion:5 /main:RemoteControlSetup.SetupLayoutTest "/out:$exe" "/win32manifest:$manifest" /r:System.dll /r:System.Core.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll /r:System.ServiceProcess.dll /r:System.IO.Compression.dll /r:System.Web.Extensions.dll @sources
+$sources=@('Setup.cs','src\TelegramCredentials.cs','SetupLayout.cs','SetupWebForm.cs','SetupLanMcp.cs','SetupLanForm.cs','SetupVdd.cs','SetupWebMcp.cs','bench\SetupLayoutTest.cs')|ForEach-Object {Join-Path $root $_}
+& $csc /nologo /target:exe /platform:x64 /langversion:5 /main:RemoteControlSetup.SetupLayoutTest "/out:$exe" "/win32manifest:$manifest" /r:System.dll /r:System.Core.dll /r:System.Security.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll /r:System.ServiceProcess.dll /r:System.IO.Compression.dll /r:System.Web.Extensions.dll @sources
 if($LASTEXITCODE -ne 0){throw 'Setup layout fixture compilation failed'}
 $testArgs=@($dest)
-if($BuiltSetup){$testArgs+=Join-Path $root 'dist\RemoteControl_Setup.exe'}
+if($BuiltSetup){$testArgs+=Join-Path $root 'dist\RemoteControl_SetupEngine.exe'}
 & $exe @testArgs
 if($LASTEXITCODE -ne 0){throw "Setup layout test failed: $dest"}
 "Layout screenshots: $dest"

@@ -37,3 +37,8 @@
 **/oauth-state*
 **/tsnet/
 **/tls/
+
+**/.agentclihub-attachments/
+**/*토큰등록.ps1
+**/Apply-RemoteControl-Telegram.cmd
+**/*.dpapi

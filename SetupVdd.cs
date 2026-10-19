@@ -1,4 +1,4 @@
-// 가상 모니터 장치를 만들고 지운다. (설치 관리자의 일부)
+﻿// 가상 모니터 장치를 만들고 지운다. (설치 관리자의 일부)
 //
 // 왜 이런 게 필요한가.
 //   모니터를 안 꽂은 PC 는 윈도우가 GPU 드라이버를 못 쓰고 기본 화면 장치로 잡는다.
@@ -23,6 +23,26 @@ namespace RemoteControlSetup
 {
     internal static class Vdd
     {
+        internal static string PayloadInf(string directory)
+        {
+            // 이전 설치가 남긴 .bat/.exe/.cer를 관리자 권한으로 신뢰하지 않는다.
+            string[] allowed = { "MttVDD.inf", "MttVDD.dll", "mttvdd.cat", "vdd_settings.xml" };
+            for (string part = System.IO.Path.GetFullPath(directory); part != null; part = System.IO.Path.GetDirectoryName(part))
+                if (System.IO.Directory.Exists(part) && (System.IO.File.GetAttributes(part) & System.IO.FileAttributes.ReparsePoint) != 0)
+                    throw new System.IO.IOException("드라이버 경로에 재분석 지점이 있습니다.");
+            foreach (string path in System.IO.Directory.GetFileSystemEntries(directory))
+            {
+                string name = System.IO.Path.GetFileName(path);
+                bool found = false;
+                foreach (string item in allowed) if (string.Equals(name, item, StringComparison.OrdinalIgnoreCase)) found = true;
+                if (!found || System.IO.Directory.Exists(path) || (System.IO.File.GetAttributes(path) & System.IO.FileAttributes.ReparsePoint) != 0)
+                    throw new System.IO.IOException("예상하지 않은 드라이버 파일이 있습니다: " + name);
+            }
+            foreach (string item in allowed)
+                if (!System.IO.File.Exists(System.IO.Path.Combine(directory, item))) throw new System.IO.IOException("검증된 드라이버 구성 파일이 없습니다: " + item);
+            return System.IO.Path.Combine(directory, "MttVDD.inf");
+        }
+
         internal const string HardwareId = "Root\\MttVDD";
         internal const string SettingsDir = @"C:\VirtualDisplayDriver";
 
