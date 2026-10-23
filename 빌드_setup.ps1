@@ -2,7 +2,7 @@
 #         빌드_setup.ps1 -IncludeTailscaleKey   기존 Tailscale 키·알림 설정 포함
 #         빌드_setup.ps1 -NoKey                기본 동작과 같음 (기존 명령 호환)
 [CmdletBinding()]
-param([switch]$NoKey, [switch]$IncludeTailscaleKey)
+param([switch]$NoKey, [switch]$IncludeTailscaleKey, [string]$InnoCompiler)
 
 # 설치 파일 만들기.
 # 본체(RemoteControl.exe)를 설치 관리자 안에 넣는다. 배포는 이 한 파일이면 끝.
@@ -16,7 +16,7 @@ $app = Join-Path $buildDir 'RemoteControl.exe'
 $ico = Join-Path $root 'remotecontrol.ico'
 $out = Join-Path $buildDir 'RemoteControl_Setup.exe'
 $engine = Join-Path $buildDir 'RemoteControl_SetupEngine.exe'
-$iscc = @((Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'), (Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe')) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+$iscc = @($InnoCompiler, (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'), (Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe')) | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) } | Select-Object -First 1
 if (-not $iscc) { throw 'Inno Setup 6의 ISCC.exe를 찾을 수 없습니다.' }
 
 if ($NoKey -and $IncludeTailscaleKey) { throw "-NoKey와 -IncludeTailscaleKey는 함께 지정할 수 없습니다." }
@@ -216,4 +216,4 @@ $fi = Get-Item $out
 "설치 파일 경로: $out"
 
 # 배포물을 만든 소스와 포함된 바이너리를 해시로 연결한다. 설치나 서비스 재시작은 하지 않는다.
-& (Join-Path $root 'build\Write-BuildManifest.ps1') -Root $root
+& (Join-Path $root 'build\Write-BuildManifest.ps1') -Root $root -InnoCompiler $iscc

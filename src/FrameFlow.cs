@@ -25,7 +25,8 @@ namespace RemoteControl
         private double latency;
         private double networkLatency;
         private int probeNumber;
-        private long probeAt = -1;
+        private long probeAt = -1, lastProbe = -5000;
+        private readonly Queue<double> probes = new Queue<double>();
         private int budget = PacketBytes, change;
         internal int Budget { get { lock (gate) return budget; } }
         internal int Change { get { lock (gate) return change; } }
@@ -38,13 +39,19 @@ namespace RemoteControl
         }
         internal double Latency { get { lock (gate) return latency; } }
         internal double QueueLatency { get { lock (gate) return Math.Max(0, latency - networkLatency); } }
-        internal int Probe() { lock (gate) { probeAt = time.ElapsedMilliseconds; return ++probeNumber; } }
+        internal bool ProbeDue { get { lock (gate) return enabled && time.ElapsedMilliseconds - lastProbe >= 5000; } }
+        internal int Probe() { lock (gate) { lastProbe = probeAt = time.ElapsedMilliseconds; return ++probeNumber; } }
         internal void ProbeAck(int n)
         {
             lock (gate)
             {
                 if (probeAt < 0 || n != probeNumber) return;
-                networkLatency = Math.Max(0, time.ElapsedMilliseconds - probeAt); probeAt = -1;
+                probes.Enqueue(Math.Max(0, time.ElapsedMilliseconds - probeAt)); probeAt = -1;
+                while (probes.Count > 12) probes.Dequeue();
+                // A probe can itself queue behind an image. Use a rolling floor, not
+                // the most congested sample, and let route changes age out in a minute.
+                networkLatency = double.MaxValue;
+                foreach (double sample in probes) networkLatency = Math.Min(networkLatency, sample);
             }
         }
         internal void Enable() { lock (gate) { enabled = negotiated = true; WakeLocked(); } }
@@ -94,6 +101,18 @@ namespace RemoteControl
         }
     }
 
+    internal static class TilePolicy
+    {
+        internal static int Choose(int maximum, int width, int height, int budget)
+        {
+            if (maximum < 1024) return 128; // old browsers negotiate only 128
+            if (budget < 24 * 1024) return 128;
+            if (budget < 64 * 1024) return 256;
+            if (budget < 192 * 1024 || (long)width * height < 3840L * 2160) return 512;
+            return 1024;
+        }
+    }
+
     internal sealed class FrameSchedule
     {
         private readonly Stopwatch time = Stopwatch.StartNew();
@@ -138,6 +157,16 @@ namespace RemoteControl
         }
     }
 
+    internal interface IRealtimeVideo : IDisposable
+    {
+        int Id { get; }
+        bool Active { get; set; }
+        bool Expired { get; }
+        void Heartbeat();
+        void Send(string value);
+        bool TryRead(out string value);
+    }
+
     // 모든 출력/화면 변경을 송신 스레드에 맡긴다. 느린 Write가 입력 수신을 막지 않게 한다.
     internal sealed class StreamCommands
     {
@@ -148,6 +177,9 @@ namespace RemoteControl
         internal bool AutoQuality = true;
         internal int MaxTileSize = 128;
         internal bool Paused;
+        internal IRealtimeVideo Video;
+        internal int VideoAttemptView = -1;
+        internal int VideoAttemptAt = Environment.TickCount - 10000;
         internal readonly LatestTiles Tiles = new LatestTiles();
         internal readonly FrameFlow Flow = new FrameFlow();
         internal void Post(Action action)

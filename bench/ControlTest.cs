@@ -63,6 +63,22 @@ namespace RemoteControl
                 var distant = new FrameFlow(); distant.Enable(); int probe = distant.Probe(); Thread.Sleep(80); distant.ProbeAck(probe);
                 int far = distant.Begin(distant.Budget); Thread.Sleep(90); distant.Ack(far);
                 Check(distant.Budget > FrameFlow.PacketBytes, "high base RTT alone does not throttle a fast WAN");
+                Check(TilePolicy.Choose(1024, 3840, 2160, 32768) == 256, "medium budget retains useful 256-pixel tiles");
+                Check(TilePolicy.Choose(1024, 3840, 2160, 131072) == 512, "moderate bandwidth uses 512-pixel tiles");
+                Check(TilePolicy.Choose(128, 3840, 2160, 524288) == 128, "old viewer keeps its negotiated grid");
+                IntPtr metadata = System.Runtime.InteropServices.Marshal.AllocHGlobal(40);
+                try
+                {
+                    int[] values = { 5, 7, 20, 30, 100, 120, 140, 150, 180, 190 };
+                    System.Runtime.InteropServices.Marshal.Copy(values, 0, metadata, values.Length);
+                    var regions = new List<Rectangle>();
+                    Check(DesktopRegions.Append(metadata, 24, 40, true, 256, 256, regions) && regions[0] == new Rectangle(20, 30, 80, 90), "move destination is preserved beside ordinary dirty regions");
+                    Check(DesktopRegions.Append(new IntPtr(metadata.ToInt64() + 24), 16, 16, false, 256, 256, regions) && regions.Count == 2, "mixed move and dirty metadata is combined");
+                    Check(!DesktopRegions.Append(metadata, 23, 40, true, 256, 256, regions), "truncated move metadata requests a complete refresh");
+                    Check(!DesktopRegions.Append(metadata, 48, 40, true, 256, 256, regions), "oversized metadata cannot read beyond its buffer");
+                    Check(!DesktopRegions.Append(metadata, 24, 40, true, 16, 16, regions), "out-of-screen move cannot cause a partial stale frame");
+                }
+                finally { System.Runtime.InteropServices.Marshal.FreeHGlobal(metadata); }
                 var tiles = new LatestTiles();
                 tiles.Merge(new List<TilePatch> { Patch(0, 1), Patch(1, 2) });
                 tiles.Merge(new List<TilePatch> { Patch(0, 3), Patch(2, 4) });
@@ -104,6 +120,7 @@ namespace RemoteControl
         internal Rectangle[] Dirty { get { return new Rectangle[0]; } }
         internal int SrcW { get { return 256; } } internal int SrcH { get { return 256; } }
         private bool first = true;
+        internal static void FindOutput(Rectangle area, out int adapter, out int output) { adapter = output = -1; }
         internal static DesktopDup Open(Rectangle area) { return new DesktopDup(); }
         internal int Grab(Bitmap frame, Rectangle area, int w, int h)
         {

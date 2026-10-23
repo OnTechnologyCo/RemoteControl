@@ -75,6 +75,32 @@ namespace RemoteControl
             public UIntPtr PeakJobMemoryUsed;
         }
 
+        [DllImport("kernel32.dll")] private static extern bool CloseHandle(IntPtr handle);
+        internal sealed class ProcessJob : IDisposable
+        {
+            private IntPtr handle;
+            internal ProcessJob(Process process)
+            {
+                handle = CreateJobObject(IntPtr.Zero, null);
+                var info = new JOBOBJECT_EXTENDED_LIMIT_INFORMATION();
+                info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+                int size = Marshal.SizeOf(info); IntPtr mem = Marshal.AllocHGlobal(size);
+                try
+                {
+                    Marshal.StructureToPtr(info, mem, false);
+                    if (handle == IntPtr.Zero || !SetInformationJobObject(handle, JobObjectExtendedLimitInformation, mem, (uint)size) ||
+                        !AssignProcessToJobObject(handle, process.Handle))
+                    { Dispose(); throw new InvalidOperationException("Cannot contain video process"); }
+                }
+                finally { Marshal.FreeHGlobal(mem); }
+            }
+            public void Dispose()
+            {
+                IntPtr h = System.Threading.Interlocked.Exchange(ref handle, IntPtr.Zero);
+                if (h != IntPtr.Zero) CloseHandle(h);
+            }
+        }
+
         internal static void Adopt(Process p)
         {
             if (p == null) return;

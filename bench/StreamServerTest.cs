@@ -147,7 +147,7 @@ namespace RemoteControl
                                 tile = Json.Int(o, "tile", 0); cols = Json.Int(o, "cols", 0); rows = Json.Int(o, "rows", 0);
                                 int next = Json.Int(o, "view", 0); if (next <= view) throw new Exception("Tile grid reused viewport"); view = next;
                                 if (tile == 1024) { large = true; Check(cols == 4 && rows == 3, "actual 4K sender negotiates 12 large tiles on fast ACKs"); }
-                                else if (large) { Check(tile == 128 && cols == 30 && rows == 17, "slow ACKs restore 510 small tiles without changing resolution"); restored = true; }
+                                else if (large) { Check(tile < 1024 && cols == (3840 + tile - 1) / tile && rows == (2160 + tile - 1) / tile, "slow ACKs reduce tile size without changing resolution"); restored = true; }
                             }
                             else if (t == "frame")
                             {

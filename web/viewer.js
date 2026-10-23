@@ -14,6 +14,13 @@ var cx = cv.getContext('2d', { alpha: false });
 var stage = document.getElementById('stage');
 var world = document.getElementById('world');
 var curImg = document.getElementById('cur');
+var jpegDecoder = typeof JpegDecoder !== 'undefined' && typeof createImageBitmap !== 'undefined' ? new JpegDecoder() : null;
+var videoTransport = typeof RemoteVideo !== 'undefined' ? new RemoteVideo({
+  world: world, cursor: curImg, send: send, view: function () { return viewId; },
+  mode: function (mode) { document.getElementById('mWay').textContent = mode; },
+  stats: function (bytes, frames) { rxBytes += bytes; rxFrames += frames; }
+}) : null;
+
 
 var W = 0, H = 0, cols = 0, rows = 0;
 var scale = 1, offX = 0, offY = 0;
@@ -209,6 +216,7 @@ var curPc = 0;
 var wsGen = 0;
 
 function connect() {
+  if (videoTransport) videoTransport.stop(false);
   var gen = ++wsGen;
   resetInput(false);
   inputReady = false; firstInit = true; supportsFlow = false;
@@ -223,6 +231,7 @@ function connect() {
   ws.onmessage = function (ev) { if (gen === wsGen) onMessage(ev); };
 
   ws.onclose = function () {
+    if (gen === wsGen && videoTransport) videoTransport.stop(false);
     if (gen !== wsGen) return;          // 우리가 갈아탄 것이다. 되살리지 않는다
 
     alive = false; inputReady = false;
@@ -312,10 +321,12 @@ function onMessage(ev) {
       document.getElementById('bMon').textContent = '화면 ' + (m.screen + 1);
       if (fit) doFit(); else applyTransform();
       hideMsg();
+      if (videoTransport) videoTransport.start(m);
     }
+    else if (m.t === 'rtc') { if (videoTransport) videoTransport.handle(m); }
     else if (m.t === 'probe') { send({ t: 'probeack', n: m.n }); }
     else if (m.t === 'capture') {
-      document.getElementById('mWay').textContent = m.way === 'Desktop Duplication' ? 'DD' : 'GDI';
+      if (!videoTransport || !videoTransport.active()) document.getElementById('mWay').textContent = m.way === 'Desktop Duplication' ? 'DD' : 'GDI';
     }
     else if (m.t === 'tiles') {
       // 전송 크기만 바뀌었다. 보이던 화면은 유지하고 옛 타일 디코딩만 무효화한다.
@@ -335,6 +346,7 @@ function onMessage(ev) {
       document.getElementById('mLat').textContent = Math.round(performance.now() - m.c);
     }
     else if (m.t === 'fail') {
+      if (videoTransport) videoTransport.stop(false);
       // 하위 PC 에 붙지 못했다. 스스로 다시 붙어 봐야 같은 곳에서 또 막히므로
       // 되풀이하지 않고, 이유를 보여 준 뒤 고르는 창으로 돌려보낸다.
       resetInput(false); inputReady = false; renderGen++;
@@ -451,6 +463,11 @@ function drawTile(idx, bytes) {
       markScreenPaint();
     }
   }
+  if (jpegDecoder) {
+    return jpegDecoder.decode(bytes,
+      function () { return gen === renderGen && tileVersions[idx] === version && !gesturing; }, paint)
+      .then(function (ok) { if (!ok && gen === renderGen) send({ t: 'refresh' }); });
+  }
   if (self.createImageBitmap) {
     return createImageBitmap(new Blob([bytes], { type: 'image/jpeg' }))
       .then(function (bm) { try { paint(bm); } finally { if (bm.close) bm.close(); } })
@@ -480,6 +497,7 @@ setInterval(function () {
 setInterval(function () { send({ t: 'ping', c: performance.now() }); }, 2000);
 
 function send(o) {
+  if (o.t === 'quality' && videoTransport) videoTransport.quality(o.q);
   if (!ws || ws.readyState !== 1) return false;
   var input = o.t === 'btn' || o.t === 'key' || o.t === 'move' || o.t === 'wheel' || o.t === 'text';
   if (input && (!alive || !inputReady)) return false;
@@ -1058,6 +1076,7 @@ document.getElementById('bOut').addEventListener('click', function () {
 document.addEventListener('visibilitychange', function () {
   if (document.hidden) resetInput(true);
   if (supportsFlow) send({ t: 'viewpause', v: document.hidden });
+  if (videoTransport) { if (document.hidden) videoTransport.stop(true); else videoTransport.resume(); }
 });
 window.addEventListener('blur', function () { resetInput(true); });
 window.addEventListener('pagehide', function () { resetInput(true); });

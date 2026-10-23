@@ -216,6 +216,19 @@ namespace RemoteControl
                         SendPage(stream, Res("viewer.html"));
                         return;
 
+                    case "/video-notices":
+                        Send(stream, "200 OK", "text/plain; charset=utf-8", Encoding.UTF8.GetBytes(
+                            Res("THIRD_PARTY_NOTICES.md") + "\n\n" + Res("Pion-MIT.txt") + "\n\n" + Res("LGPL-3.0.txt") + "\n\n" + Res("GPL-3.0.txt")), "Cache-Control: no-store\r\n");
+                        return;
+
+                    case "/media.js":
+                        Send(stream, "200 OK", "application/javascript; charset=utf-8",
+                             Encoding.UTF8.GetBytes(Res("media.js")), "Cache-Control: no-store\r\n");
+                        return;
+                    case "/jpeg-worker.js":
+                        Send(stream, "200 OK", "application/javascript; charset=utf-8",
+                             Encoding.UTF8.GetBytes(Res("jpeg-worker.js")), "Cache-Control: no-store\r\n");
+                        return;
                     case "/viewer.js":
                         Send(stream, "200 OK", "application/javascript; charset=utf-8",
                              Encoding.UTF8.GetBytes(Res("viewer.js")), "Cache-Control: no-store\r\n");
@@ -759,6 +772,34 @@ namespace RemoteControl
 
                     switch (t)
                     {
+                        case "rtc":
+                            string rtcOp = Json.Str(o, "op"), rtcData = Json.Str(o, "data") ?? "";
+                            int rtcId = Json.Int(o, "id", 0), rtcView = Json.Int(o, "view", -1);
+                            if (rtcData.Length > 128 * 1024) break;
+                            output.Post(delegate {
+                                if (rtcOp == "offer")
+                                {
+                                    if (rtcView != output.View || output.Paused || output.Video != null || (output.VideoAttemptView == rtcView && Environment.TickCount - output.VideoAttemptAt < 10000))
+                                    { SendRtc(ws, rtcId, "stop", "JPEG"); return; }
+                                    output.VideoAttemptAt = Environment.TickCount; output.VideoAttemptView = rtcView;
+                                    output.Video = RtcSession.Start(rtcId, rtcData, src);
+                                    if (output.Video == null) SendRtc(ws, rtcId, "stop", "JPEG");
+                                }
+                                else if (output.Video != null && output.Video.Id == rtcId)
+                                {
+                                    if (rtcOp == "candidate" && rtcData.Length <= 8192)
+                                        output.Video.Send(new System.Web.Script.Serialization.JavaScriptSerializer().Serialize(new { type = "candidate", candidate = rtcData }));
+                                    else if (rtcOp == "ready" || rtcOp == "health")
+                                    {
+                                        output.Video.Heartbeat();
+                                        if (rtcOp == "ready") { output.Video.Active = true; output.Tiles.Clear(); }
+                                        int rate;
+                                        if (int.TryParse(rtcData, out rate)) output.Video.Send("{\"type\":\"rate\",\"Bitrate\":" + Math.Max(500000, Math.Min(12000000, rate)) + "}");
+                                    }
+                                    else if (rtcOp == "stop") StopVideo(ws, src, output);
+                                }
+                            });
+                            break;
                         case "ack":
                             output.Flow.Ack(Json.Int(o, "n", 0));
                             break;
@@ -780,7 +821,7 @@ namespace RemoteControl
                             break;
                         case "viewpause":
                             bool pause = Json.Bool(o, "v", false);
-                            output.Post(delegate { output.Paused = pause; if (!pause) src.InvalidateAll(); });
+                            output.Post(delegate { output.Paused = pause; if (pause) StopVideo(ws, src, output); else { src.InvalidateAll(); output.VideoAttemptAt = Environment.TickCount - 10000; } });
                             break;
                         // 브라우저가 보내는 좌표는 "받은 그림" 기준이다.
                         // 축소해서 보내는 중이면 그만큼 되돌려야 실제 화면 좌표가 된다.
@@ -932,6 +973,7 @@ namespace RemoteControl
                 input.Dispose(); // 네트워크 정리를 기다리기 전에 이 접속이 누른 입력부터 해제한다.
                 ws.Abort();
                 if (sender != null) { try { sender.Join(500); } catch { } }
+                if (output.Video != null) output.Video.Dispose();
                 if (src != null) src.Dispose();
 
                 Interlocked.Decrement(ref Viewers);
@@ -948,6 +990,7 @@ namespace RemoteControl
 
         private static void SendInit(WebSocketConn ws, ScreenSource src, int screenIndex, StreamCommands output)
         {
+            StopVideo(ws, src, output);
             output.Mapping = new InputViewport(src.Area, src.FrameWidth, src.FrameHeight, output.View);
             // 이 PC 가 받아 주는 화면 크기 목록도 같이 보낸다.
             // 모니터 없는 PC 는 원격에서 크기를 못 고치면 작은 화면으로 갇힌다.
@@ -971,10 +1014,23 @@ namespace RemoteControl
 
             ws.SendText(string.Format(
                 "{{\"t\":\"init\",\"w\":{0},\"h\":{1},\"cols\":{2},\"rows\":{3},\"screen\":{4},\"screens\":{5}," +
-                "\"scale\":{6},\"way\":\"{7}\",\"sizes\":{8},\"sw\":{9},\"sh\":{10},\"flow\":1,\"view\":{11},\"tile\":{12},\"tilemax\":1024}}",
+                "\"scale\":{6},\"way\":\"{7}\",\"sizes\":{8},\"sw\":{9},\"sh\":{10},\"flow\":1,\"view\":{11},\"tile\":{12},\"tilemax\":1024,\"rtc\":{13},\"ice\":{14}}}",
                 src.FrameWidth, src.FrameHeight, src.Cols, src.Rows,
                 screenIndex, Screen.AllScreens.Length, src.ScalePercent, src.Method,
-                sizes, cur.Width, cur.Height, output.View, src.TileSize));
+                sizes, cur.Width, cur.Height, output.View, src.TileSize, RtcSession.Available ? 1 : 0,
+                new System.Web.Script.Serialization.JavaScriptSerializer().Serialize(RtcSession.IceServers())));
+        }
+
+        private static void SendRtc(WebSocketConn ws, int id, string op, string data)
+        {
+            ws.SendText(new System.Web.Script.Serialization.JavaScriptSerializer().Serialize(new { t = "rtc", id = id, op = op, data = data }));
+        }
+        private static void StopVideo(WebSocketConn ws, ScreenSource src, StreamCommands output)
+        {
+            IRealtimeVideo video = output.Video;
+            if (video == null) return;
+            output.Video = null; video.Dispose(); output.Tiles.Clear(); src.InvalidateAll();
+            SendRtc(ws, video.Id, "stop", "JPEG");
         }
 
         /// <summary>
@@ -991,6 +1047,7 @@ namespace RemoteControl
             int qualityChangedAt = Environment.TickCount;
             int lastMotionAt = Environment.TickCount;
             int tileChangedAt = Environment.TickCount - 3000;
+            int cursorAt = Environment.TickCount - 33;
 
             int lastCurX = -99999, lastCurY = -99999, lastShape = 0;
             bool lastVis = false;
@@ -1002,21 +1059,32 @@ namespace RemoteControl
 
                 output.Drain();
                 if (output.Flow.TimedOut) break;
-                if (!output.Flow.Ready || output.Paused || !output.Flow.CanSend) { output.Flow.Wait(change, 16); continue; }
+                if (!output.Flow.Ready || output.Paused) { output.Flow.Wait(change, 16); continue; }
                 ScreenSource src = get();
+                if (output.Flow.ProbeDue) ws.SendText("{\"t\":\"probe\",\"n\":" + output.Flow.Probe() + "}");
+                if (output.Video != null)
+                {
+                    string line;
+                    for (int i = 0; i < 16 && output.Video.TryRead(out line); i++)
+                    {
+                        var signal = Json.Parse(line); string type = Json.Str(signal, "type");
+                        if (type == "answer" || type == "candidate" || type == "encoder")
+                            SendRtc(ws, output.Video.Id, type, Json.Str(signal, "value") ?? "");
+                    }
+                    if (output.Video.Expired) StopVideo(ws, src, output);
+                }
+                bool videoActive = output.Video != null && output.Video.Active;
+
 
                 // 준비 중인 화면을 16ms마다 다시 압축하면 4K에서는 남은 타일이 굶는다.
                 // 빠른 망은 먼저 다 보내고, 작은 묶음은 바로 최신 내용으로 바꾼다.
                 // 큰 묶음도 100ms가 지나면 최신 화면으로 교체한다.
-                if (schedule.ShouldCapture(output.Tiles.Count, output.Flow.Budget))
+                if (!videoActive && output.Flow.CanSend && schedule.ShouldCapture(output.Tiles.Count, output.Flow.Budget))
                 {
                     schedule.StartCapture();
                     int tileSize = src.TileSize;
-                    bool largeScreen = (long)src.FrameWidth * src.FrameHeight >= 3840L * 2160;
-                    if (output.MaxTileSize < 1024 || !largeScreen || output.Flow.QueueLatency > 160 || output.Flow.Budget < 64 * 1024)
-                        tileSize = 128;
-                    else if (output.Flow.Budget >= 128 * 1024 && output.Flow.QueueLatency < 100 && Environment.TickCount - tileChangedAt >= 3000)
-                        tileSize = 1024;
+                    if (output.Video == null && Environment.TickCount - tileChangedAt >= 3000)
+                        tileSize = TilePolicy.Choose(output.MaxTileSize, src.FrameWidth, src.FrameHeight, output.Flow.Budget);
                     if (tileSize != src.TileSize)
                     {
                         src.TileSize = tileSize; output.Tiles.Clear(); output.View++;
@@ -1030,7 +1098,7 @@ namespace RemoteControl
                     if (output.Flow.Enabled && output.AutoQuality && Environment.TickCount - qualityChangedAt > 1500)
                     {
                         int q = output.Tiles.Count > 8 && Environment.TickCount - lastMotionAt < 1200
-                            ? (output.Flow.Latency > 250 ? 40 : output.Flow.Latency > 130 ? 55 : 70)
+                            ? (output.Flow.QueueLatency > 250 ? 40 : output.Flow.QueueLatency > 130 ? 55 : 70)
                             : (Environment.TickCount - lastMotionAt > 1200 ? 70 : (int)src.Quality);
                         if (src.Quality != q) { src.Quality = q; output.Tiles.Clear(); qualityChangedAt = Environment.TickCount; }
                     }
@@ -1044,6 +1112,11 @@ namespace RemoteControl
                     }
                     if (patches.Count > 0 && !src.LastGrabWasFull) lastMotionAt = Environment.TickCount;
                     output.Tiles.Merge(patches);
+                }
+                // Cursor updates do not wait for JPEG decoding acknowledgements.
+                if (Environment.TickCount - cursorAt >= 33)
+                {
+                    cursorAt = Environment.TickCount;
 
                     // 커서는 화면과 따로 보낸다.
                     // 예전에는 화면에 그려 넣어서, 마우스만 흔들어도 그 자리 타일이 계속
@@ -1094,7 +1167,7 @@ namespace RemoteControl
                     catch { }
                 }
 
-                while (output.Tiles.Count > 0 && output.Flow.CanSend && !ws.Closed)
+                while (!videoActive && output.Tiles.Count > 0 && output.Flow.CanSend && !ws.Closed)
                 {
                     byte[] packet = output.Tiles.Take(output.Flow.Budget);
                     int number = output.Flow.Begin(packet.Length);
@@ -1104,7 +1177,7 @@ namespace RemoteControl
                 }
 
                 if (output.Tiles.Count > 0 && output.Flow.CanSend) continue;
-                output.Flow.Wait(change, schedule.WaitMilliseconds);
+                output.Flow.Wait(change, videoActive || !output.Flow.CanSend ? 16 : schedule.WaitMilliseconds);
             }
         }
 

@@ -12,5 +12,13 @@
     "MttVDD.dll": "c9ca837f57a98fbd43bc416a7f535a95843626e7759eaf85cf0cd7ce334dbb05",
     "MttVDD.inf": "550d211fe481e74dfe3f9d724ed78be48b3a9113405965d683d9373e8d672f5d",
     "vdd_settings.xml": "8d1bf91c91dcdc7f3ea35a05b89a33e573d4705a1f1627340ef7b01e197d81ec"
+  },
+  "ffmpeg": {
+    "version": "n9.0.2-17-g2a571b6068",
+    "license": "LGPL-3.0-or-later",
+    "directory": "ffmpeg-n9.0.2-17-g2a571b6068-win64-lgpl-9.0",
+    "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-30-13-08/ffmpeg-n9.0.2-17-g2a571b6068-win64-lgpl-9.0.zip",
+    "archiveSha256": "6b264b9e6019103f601d98c292bd332fd87acf1c5e941ddff4fb71760fe63432",
+    "exeSha256": "0e482b853f2fd4821055d20cdce510f0eea6027037c04b994f454a2136e8868e"
   }
 }

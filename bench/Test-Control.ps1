@@ -11,7 +11,7 @@ $native = Join-Path $testDir 'Native.cs'
 $exe = Join-Path $testDir 'ControlTest.exe'
 & 'C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe' /nologo /unsafe /target:exe /platform:x64 /langversion:5 "/out:$exe" `
     /r:System.dll /r:System.Core.dll /r:System.Drawing.dll $native `
-    (Join-Path $root 'src\InputInjector.cs') (Join-Path $root 'src\ScreenSource.cs') (Join-Path $root 'src\FrameFlow.cs') (Join-Path $PSScriptRoot 'ControlTest.cs')
+    (Join-Path $root 'src\InputInjector.cs') (Join-Path $root 'src\ScreenSource.cs') (Join-Path $root 'src\FrameFlow.cs') (Join-Path $root 'src\DesktopRegions.cs') (Join-Path $PSScriptRoot 'ControlTest.cs')
 if ($LASTEXITCODE -ne 0) { throw 'Control test compilation failed' }
 & $exe
 if ($LASTEXITCODE -ne 0) { throw 'Control tests failed' }

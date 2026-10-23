@@ -16,12 +16,21 @@ $buildDir = Join-Path $root 'dist'
 $out = Join-Path $buildDir 'RemoteControl.exe'
 
 & (Join-Path $root '빌드_sshtunnel.ps1')
+& (Join-Path $root 'build\Build-Video.ps1')
 
 $srcs = Get-ChildItem (Join-Path $root "src") -Filter *.cs | ForEach-Object { $_.FullName }
 
 $res = @(
     "web\viewer.html,viewer.html"
     "web\viewer.js,viewer.js"
+    "web\media.js,media.js"
+    "web\jpeg-worker.js,jpeg-worker.js"
+    "video-helper.exe.gz,video-helper.exe.gz"
+    "video-ffmpeg.exe.gz,video-ffmpeg.exe.gz"
+    "THIRD_PARTY_NOTICES.md,THIRD_PARTY_NOTICES.md"
+    "third_party\LGPL-3.0.txt,LGPL-3.0.txt"
+    "third_party\GPL-3.0.txt,GPL-3.0.txt"
+    "third_party\Pion-MIT.txt,Pion-MIT.txt"
     "web\login.html,login.html"
     "tsproxy.exe.gz,tsproxy.exe.gz"
     "sshtunnel-client.exe.gz,sshtunnel-client.exe.gz"

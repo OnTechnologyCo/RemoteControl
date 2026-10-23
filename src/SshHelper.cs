@@ -10,16 +10,17 @@ namespace RemoteControl
 {
     internal static class SshHelper
     {
-        internal static string Prepare()
+        internal static string Prepare() { return Prepare("sshtunnel-client.exe.gz", "sshtunnel-client", "sshtunnel"); }
+        internal static string Prepare(string resourceName, string prefix, string folder)
         {
             byte[] raw;
-            using (Stream resource = Assembly.GetExecutingAssembly().GetManifestResourceStream("sshtunnel-client.exe.gz"))
+            using (Stream resource = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName))
             {
                 if (resource == null) throw new InvalidOperationException("내장 SSHTunnel 연결 모듈이 없습니다. 새 설치 파일로 업데이트하세요.");
                 using (var gzip = new GZipStream(resource, CompressionMode.Decompress))
                 using (var memory = new MemoryStream()) { gzip.CopyTo(memory); raw = memory.ToArray(); }
             }
-            string hash = Hash(raw), file = "sshtunnel-client-" + hash.Substring(0, 20) + ".exe";
+            string hash = Hash(raw), file = prefix + "-" + hash.Substring(0, 20) + ".exe";
             bool privileged;
             using (WindowsIdentity me = WindowsIdentity.GetCurrent())
                 privileged = me.IsSystem || new WindowsPrincipal(me).IsInRole(WindowsBuiltInRole.Administrator);
@@ -30,7 +31,10 @@ namespace RemoteControl
                 if (root.Length == 0) continue;
                 try
                 {
-                    string dir = Path.Combine(root, "RemoteControl", "bin", "sshtunnel");
+                    // Video executables live outside the user-writable settings tree.
+                    // Protecting only a leaf allows a writable ancestor to be renamed.
+                    string dir = folder == "video" ? Path.Combine(root, "RemoteControlVideoRuntime")
+                        : Path.Combine(root, "RemoteControl", "bin", folder);
                     for (string part = dir; part != null; part = Path.GetDirectoryName(part))
                         if (Directory.Exists(part) && (File.GetAttributes(part) & FileAttributes.ReparsePoint) != 0)
                             throw new IOException("SSHTunnel 모듈 경로에 재분석 지점을 사용할 수 없습니다.");

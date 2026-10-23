@@ -12,11 +12,11 @@ async function run() {
   const js = fs.readFileSync(path.join(root, 'web/viewer.js'), 'utf8').replace(/start\(\);\s*$/, '');
   const html = fs.readFileSync(path.join(root, 'web/viewer.html'));
   server = http.createServer((req, res) => {
-    const body = req.url === '/viewer.js' ? js : req.url === '/frame.bin' ? fs.readFileSync(path.join(dest, 'frame.bin')) : req.url === '/' ? html : '';
-    res.writeHead(body ? 200 : 404, { 'Content-Type': req.url === '/viewer.js' ? 'text/javascript; charset=utf-8' : req.url === '/frame.bin' ? 'application/octet-stream' : 'text/html; charset=utf-8' }); res.end(body);
+    const body = req.url === '/media.js' || req.url === '/jpeg-worker.js' ? fs.readFileSync(path.join(root, 'web', req.url.slice(1))) : req.url === '/viewer.js' ? js : req.url === '/frame.bin' ? fs.readFileSync(path.join(dest, 'frame.bin')) : req.url === '/' ? html : '';
+    res.writeHead(body ? 200 : 404, { 'Content-Type': req.url.endsWith('.js') ? 'text/javascript; charset=utf-8' : req.url === '/frame.bin' ? 'application/octet-stream' : 'text/html; charset=utf-8' }); res.end(body);
   });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
-  edge = spawn('C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe', ['--headless=new', '--no-first-run', '--no-default-browser-check', '--remote-debugging-port=0', '--user-data-dir=' + profile, 'about:blank'], { windowsHide: true, stdio: 'ignore' });
+  edge = spawn(process.env.RC_TEST_BROWSER || 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe', ['--headless=new', '--no-first-run', '--no-default-browser-check', '--remote-debugging-port=0', '--user-data-dir=' + profile, 'about:blank'], { windowsHide: true, stdio: 'ignore' });
   await poll(() => fs.existsSync(path.join(profile, 'DevToolsActivePort')));
   const port = fs.readFileSync(path.join(profile, 'DevToolsActivePort'), 'utf8').split('\n')[0];
   const pages = await (await fetch('http://127.0.0.1:' + port + '/json/list')).json();

@@ -81,6 +81,7 @@ namespace RemoteControl
 
         private DesktopDup dup;          // 빠른 경로. 못 쓰면 null 로 두고 GDI 로 간다.
         private bool dupTried;
+        private int dupAttemptAt;
         private int dupFailStreak;
 
         internal Rectangle Area { get { return area; } }
@@ -434,9 +435,10 @@ namespace RemoteControl
 
         private int TryDup()
         {
-            if (!dupTried)
+            if (!dupTried || (dup == null && Environment.TickCount - dupAttemptAt >= 5000))
             {
                 dupTried = true;
+                dupAttemptAt = Environment.TickCount;
                 dup = DesktopDup.Open(area);
             }
 

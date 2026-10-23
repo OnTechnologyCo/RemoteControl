@@ -410,6 +410,44 @@ namespace RemoteControl
             return null;
         }
 
+        internal static void FindOutput(Rectangle area, out int adapter, out int output)
+        {
+            adapter = output = -1;
+            object fo = null;
+            try
+            {
+                Guid iid = new Guid("770aae78-f26f-4dba-a829-253c83d1b387");
+                if (CreateDXGIFactory1(ref iid, out fo) != 0) return;
+                var factory = fo as IDXGIFactory1;
+                if (factory == null) return;
+                for (uint ai = 0; ai < 32; ai++)
+                {
+                    IDXGIAdapter1 ad;
+                    if (factory.EnumAdapters1(ai, out ad) != 0 || ad == null) break;
+                    try
+                    {
+                        for (uint oi = 0; oi < 32; oi++)
+                        {
+                            IDXGIOutput op;
+                            if (ad.EnumOutputs(oi, out op) != 0 || op == null) break;
+                            try
+                            {
+                                DXGI_OUTPUT_DESC od;
+                                if (op.GetDesc(out od) == 0 && od.AttachedToDesktop && od.Rotation <= 1 &&
+                                    od.DesktopCoordinates.Left == area.Left && od.DesktopCoordinates.Top == area.Top &&
+                                    od.DesktopCoordinates.Right == area.Right && od.DesktopCoordinates.Bottom == area.Bottom)
+                                { adapter = (int)ai; output = (int)oi; return; }
+                            }
+                            finally { Release(op); }
+                        }
+                    }
+                    finally { Release(ad); }
+                }
+            }
+            catch { adapter = output = -1; }
+            finally { Release(fo); }
+        }
+
         private bool Init(Rectangle area)
         {
             Guid iid = new Guid("770aae78-f26f-4dba-a829-253c83d1b387");
@@ -541,28 +579,14 @@ namespace RemoteControl
                 }
 
                 uint need;
-                int hr = odup.GetFrameDirtyRects((uint)rectCap, rectMem, out need);
+                int hr = odup.GetFrameMoveRects((uint)rectCap, rectMem, out need);
                 DbgHr = hr; DbgNeed = need;
-
-                if (hr != 0) return;
-
-                int n = (int)(need / one);
-                if (n < 0 || n > rectCap / one) return;
-
-                // n == 0 도 "모른다" 가 아니라 "바뀐 자리가 없다" 는 답이다.
-                // 다만 그림은 새로 왔으므로(AcquireNextFrame 이 새 프레임을 줬다)
-                // 그 경우는 전체를 다시 보는 편이 안전하다 - move 만 있었을 수 있다.
-                if (n == 0) return;
-
-                Rectangle[] r = new Rectangle[n];
-                for (int i = 0; i < n; i++)
-                {
-                    RECT q = (RECT)Marshal.PtrToStructure(new IntPtr(rectMem.ToInt64() + (long)i * one),
-                                                          typeof(RECT));
-                    r[i] = Rectangle.FromLTRB(q.Left, q.Top, q.Right, q.Bottom);
-                }
-
-                Dirty = r;
+                var regions = new System.Collections.Generic.List<Rectangle>();
+                if (hr != 0 || !DesktopRegions.Append(rectMem, need, rectCap, true, srcW, srcH, regions)) return;
+                hr = odup.GetFrameDirtyRects((uint)rectCap, rectMem, out need);
+                DbgHr = hr; DbgNeed = need;
+                if (hr != 0 || !DesktopRegions.Append(rectMem, need, rectCap, false, srcW, srcH, regions)) return;
+                Dirty = regions.ToArray();
                 DirtyKnown = true;
             }
             catch (Exception ex) { DbgEx = ex.GetType().Name + ": " + ex.Message; }

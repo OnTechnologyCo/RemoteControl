@@ -1,5 +1,5 @@
 ﻿[CmdletBinding()]
-param([Parameter(Mandatory=$true)][string]$Root)
+param([Parameter(Mandatory=$true)][string]$Root, [string]$InnoCompiler)
 $ErrorActionPreference = 'Stop'
 $Root = [IO.Path]::GetFullPath($Root).TrimEnd('\')
 $dist = Join-Path $Root 'dist'
@@ -48,9 +48,9 @@ $sdk = Join-Path (Split-Path -Parent $Root) 'SSHTunnel'
 $sdkSources = @(SourceFiles $sdk | Where-Object { $_.Extension -in @('.go','.mod','.sum') } | ForEach-Object {
     [ordered]@{Path=$_.FullName.Substring($sdk.Length+1).Replace('\','/');SHA256=(Get-FileHash -LiteralPath $_.FullName).Hash}
 })
-$manifest = [ordered]@{SchemaVersion=1;BuiltAtUtc=[DateTime]::UtcNow.ToString('o');ContainsPreset=($assembly.GetManifestResourceNames() -contains 'preset.txt');SourceFingerprint=$fingerprint;Sources=$sources;SSHTunnelSDK=$sdkSources;Resources=$resources;Outputs=$outputs;GoBinaries=@{Tailscale=(& go version -m (Join-Path $dist 'tsproxy.exe') | Out-String);SSHTunnel=(& go version -m (Join-Path $dist 'sshtunnel-client.exe') | Out-String)};Toolchain=@{GoLauncher=(& go version | Out-String).Trim();Csc=(Get-Item "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe").VersionInfo.FileVersion};MalwareAssessment='Build provenance only; requires independent antivirus verification'}
+$manifest = [ordered]@{SchemaVersion=1;BuiltAtUtc=[DateTime]::UtcNow.ToString('o');ContainsPreset=($assembly.GetManifestResourceNames() -contains 'preset.txt');SourceFingerprint=$fingerprint;Sources=$sources;SSHTunnelSDK=$sdkSources;Resources=$resources;Outputs=$outputs;GoBinaries=@{Tailscale=(& go version -m (Join-Path $dist 'tsproxy.exe') | Out-String);SSHTunnel=(& go version -m (Join-Path $dist 'sshtunnel-client.exe') | Out-String);Video=(& go version -m (Join-Path $dist 'video-helper.exe') | Out-String)};Toolchain=@{GoLauncher=(& go version | Out-String).Trim();Csc=(Get-Item "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe").VersionInfo.FileVersion};MalwareAssessment='Build provenance only; requires independent antivirus verification'}
 $manifest['InstallerFormat']='Inno Setup'
-$inno=@((Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'),(Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe'))|Where-Object {Test-Path -LiteralPath $_}|Select-Object -First 1
+$inno=@($InnoCompiler,(Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'),(Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe'))|Where-Object {$_ -and (Test-Path -LiteralPath $_ -PathType Leaf)}|Select-Object -First 1
 if($inno){$manifest.Toolchain['InnoCompilerSHA256']=(Get-FileHash -LiteralPath $inno -Algorithm SHA256).Hash}
 $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $dist 'RemoteControl.build.json') -Encoding UTF8
 $sha.Dispose()
