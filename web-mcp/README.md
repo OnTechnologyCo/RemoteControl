@@ -48,9 +48,9 @@ HTTPS 서버를 먼저 개통해야 한다. 기존 `RemoteControl_MCP.zip`은 �
 
 웹 중계와 HTTPS는 LocalService로 실행한다. 도구는 기존 원격제어의 권한과 MCP 설정을 따른다.
 
-LAN 파일 폴더 제한은 명령 실행 샌드박스가 아니다. 명령을 허용하면 원격 대리 프로세스의
+MCP 작업공간은 기본 작업 위치이며 접근 제한 목록이 아니다. 파일·전송·실행 경로와 명시적 cwd는 작업공간 밖도 지정할 수 있고 실제 접근은 원격 실행 계정의 Windows 권한을 따른다. 작업공간 목록만으로 권한 부족을 판단하지 말고 실제 서버 오류 코드를 구분한다. 파일 도구의 경로 형식·junction/symlink 검사와 전송 무결성 검사는 유지한다.
 
-Windows 권한으로 실행된다. 로그인 화면에 이 권한을 표시하고 연결 동의를 받는다.
+로그인 화면에 실제 실행 권한을 표시하고 연결 동의를 받는다.
 
 화면·외부망 터널 포트에는 명령 API를 추가하지 않는다.
 
@@ -139,7 +139,7 @@ Caddy의 기존 홈페이지 루트 이동은 MCP와 같은 443에서 보존한�
 
    ```powershell
 
-   .\Install-WebMcp.ps1 -PublicUrl 'https://najhna.dyndns.org:59334' -LanPort 59331
+   .\Install-WebMcp.ps1 -PublicUrl 'https://remote.example.com:59334' -LanPort 59331
 
    ```
 
@@ -149,9 +149,9 @@ Caddy의 기존 홈페이지 루트 이동은 MCP와 같은 443에서 보존한�
 
 
 
-   - `https://najhna.dyndns.org:59334/.well-known/oauth-protected-resource`
+   - `https://remote.example.com:59334/.well-known/oauth-protected-resource`
 
-   - `https://najhna.dyndns.org:59334/.well-known/oauth-authorization-server`
+   - `https://remote.example.com:59334/.well-known/oauth-authorization-server`
 
 
 
@@ -159,7 +159,7 @@ Caddy의 기존 홈페이지 루트 이동은 MCP와 같은 443에서 보존한�
 
    사용자 MCP 연결을 지원해야 하며, 관리자가 기능을 제한했으면 허용이 필요하다.
 
-   서버 주소는 `https://najhna.dyndns.org:59334/mcp`, 인증은 **OAuth**를 선택한다.
+   서버 주소는 `https://remote.example.com:59334/mcp`, 인증은 **OAuth**를 선택한다.
 
    CIMD를 우선 지원하며 DCR도 지원한다. ID·비밀번호는 서버가 보여 주는 연결 화면에 입력한다.
 
@@ -231,7 +231,7 @@ HTTPS 개통 후에 검증된 주소를 담은 별도 플러그인 ZIP을 만들
 
 ```powershell
 
-.\Export-Plugin.ps1 -PublicUrl 'https://najhna.dyndns.org:59334' -Destination 'D:\Src\원격제어\dist\RemoteControl_WebPlugin.zip'
+.\Export-Plugin.ps1 -PublicUrl 'https://remote.example.com:59334' -Destination '.\dist\RemoteControl_WebPlugin.zip'
 
 ```
 

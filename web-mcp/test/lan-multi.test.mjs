@@ -26,7 +26,7 @@ async function fixture(t,config=baseConfig()) {
     if(path==='/logout'){sessions.delete(data.cookie);return {status:200,headers:{},body:'{}'};}
     if(!sessions.has(data.cookie))return {status:401,headers:{},body:'{}'};
     const rpc=JSON.parse(data.body), result=rpc.method==='tools/call'
-      ? {content:[{type:'text',text:JSON.stringify({hostname:'LAN-MULTI-FIXTURE',version:'test',allowed_roots:['C:\\fixture']})}]}
+      ? {content:[{type:'text',text:JSON.stringify({hostname:'LAN-MULTI-FIXTURE',version:'test',workspaces_restrict_access:false,workspace_directories:['C:\\fixture']})}]}
       : {};
     return {status:200,headers:{},body:JSON.stringify({jsonrpc:'2.0',id:rpc.id,result})};
   }};

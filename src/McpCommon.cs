@@ -23,33 +23,45 @@ namespace RemoteControl
         internal static object Result(object id, object result) { return new { jsonrpc = "2.0", id = id, result = result }; }
         internal static object Error(object id, int code, string message) { return new { jsonrpc = "2.0", id = id, error = new { code = code, message = message } }; }
         internal static object Text(object result) { return new { content = new[] { new { type = "text", text = Write(result) } } }; }
-        internal static object ToolError(string message) { return new { isError = true, content = new[] { new { type = "text", text = message } } }; }
+        internal static object ToolError(Exception error)
+        {
+            string code = error is McpCapabilityDisabledException ? "CAPABILITY_DISABLED" : error is UnauthorizedAccessException ? "ACCESS_DENIED" :
+                error is FileNotFoundException || error is DirectoryNotFoundException ? "NOT_FOUND" :
+                error is ArgumentException ? "INVALID_ARGUMENT" : error is IOException ? "IO_ERROR" : "OPERATION_FAILED";
+            return new { isError = true, content = new[] { new { type = "text", text = error.Message } }, structuredContent = new { error_code = code } };
+        }
+    }
+
+    internal sealed class McpCapabilityDisabledException : InvalidOperationException
+    {
+        internal McpCapabilityDisabledException(string message) : base(message) { }
     }
 
     internal sealed class McpOptions
     {
         internal bool Enabled, AllowCommands = true, AllowScreen = true;
         internal int Port = 5901;
-        internal string[] Roots = new string[0];
+        internal string[] Workspaces = new string[0];
         internal string AllowedNetworks = "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16";
         internal string CredentialStamp = "";
         // 배포한 사용자 프로그램은 RemoteControl 제거 시 지우는 설정 폴더 밖에 둔다.
-        internal static string DefaultRoot { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonDocuments), "RemoteControlDeploy"); } }
+        internal static string DefaultWorkspace { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonDocuments), "RemoteControlDeploy"); } }
         internal static McpOptions Load()
         {
             var o = new McpOptions(); o.Enabled = Config.Get("mcp_enabled") == "1";
             o.CredentialStamp = Config.User + "|" + Config.Get("pwhash");
             int port; if (int.TryParse(Config.Get("mcp_port"), out port)) o.Port = port;
             o.AllowCommands = Config.Get("mcp_commands") != "0"; o.AllowScreen = Config.Get("mcp_screen") != "0";
-            string roots = Config.Get("mcp_roots"); o.Roots = (string.IsNullOrEmpty(roots) ? DefaultRoot : roots).Split('|');
+            // Preserve the existing storage key; these are default workspaces, never an access allowlist.
+            string workspaces = Config.Get("mcp_roots"); o.Workspaces = (string.IsNullOrEmpty(workspaces) ? DefaultWorkspace : workspaces).Split('|');
             string networks = Config.Get("mcp_networks"); if (!string.IsNullOrEmpty(networks)) o.AllowedNetworks = networks;
             o.Validate(); return o;
         }
         internal void Validate()
         {
             if (Port < 1 || Port > 65535) throw new ArgumentException("MCP 포트는 1~65535여야 합니다.");
-            if (Roots.Length < 1 || Roots.Length > 32) throw new ArgumentException("파일 작업 폴더를 1~32개 지정하세요.");
-            for (int i = 0; i < Roots.Length; i++) Roots[i] = McpPath.Absolute(Roots[i]);
+            if (Workspaces.Length < 1 || Workspaces.Length > 32) throw new ArgumentException("기본 작업공간을 1~32개 지정하세요. 접근 권한을 제한하는 목록이 아닙니다.");
+            for (int i = 0; i < Workspaces.Length; i++) Workspaces[i] = McpPath.Absolute(Workspaces[i]);
             foreach (string network in AllowedNetworks.Split(',')) Network(network, IPAddress.Loopback, true);
         }
         internal bool Accepts(IPAddress ip)
@@ -91,16 +103,14 @@ namespace RemoteControl
             }
             return full.Length > 3 ? full.TrimEnd('\\') : full;
         }
-        internal static string Check(string path, McpOptions options)
+        internal static string Check(string path)
         {
-            string full = Absolute(path); bool allowed = false;
-            foreach (string root in options.Roots)
-                if (full.Equals(root, StringComparison.OrdinalIgnoreCase) || full.StartsWith(root.TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase)) { allowed = true; break; }
-            if (!allowed) throw new UnauthorizedAccessException("MCP 설정에서 허용한 작업 폴더 밖입니다.");
+            // Workspaces select default locations. Windows enforces access for every absolute path.
+            string full = Absolute(path);
             string current = full;
             while (!string.IsNullOrEmpty(current))
             {
-                try { if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0) throw new UnauthorizedAccessException("연결 폴더/junction/symlink는 파일 도구로 따라가지 않습니다."); }
+                try { if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0) throw new ArgumentException("파일 도구는 junction/symlink를 따라가지 않습니다. 실제 대상의 로컬 절대 경로를 지정하세요."); }
                 catch (FileNotFoundException) { } catch (DirectoryNotFoundException) { }
                 current = Path.GetDirectoryName(current);
             }

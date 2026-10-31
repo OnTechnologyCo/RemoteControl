@@ -1,3 +1,10 @@
+## MCP 작업공간 의미 (v1.9.2)
+
+- `mcp_roots`는 기존 작업공간을 보존하는 저장 키다. 권한/허용 경로로 해석하거나 폴더 밖 접근을 차단하지 않는다. 첫 폴더는 생략된 cwd의 기본값이다.
+- 상태 응답은 `workspace_directories`, `default_working_directory`, `workspaces_restrict_access:false`를 사용한다. `allowed_roots`라는 오해를 주는 출력은 복원하지 않는다.
+- 실제 Windows 실행 계정의 권한과 인증·활성화 설정을 따른다. 파일 도구의 로컬 절대 경로·reparse 검증, 덮어쓰기 SHA-256, 전송 소유권은 유지한다.
+- `ACCESS_DENIED`, `NOT_FOUND`, `INVALID_ARGUMENT`, `CAPABILITY_DISABLED`를 구분하고 폴더 목록만으로 권한 부족을 추측하지 않는다. LAN/웹 initialize 안내·도구 설명·UI·배포 스킬을 함께 유지한다.
+
 ## 보안 설정 / 자격 증명 경계 (v1.9.1)
 
 - 아래 과거 기록의 Users:Modify 및 토큰 읽기 허용 설명은 더 이상 적용되지 않는다. `ConfigProtection`은 설치/서비스 공통 ACL 구현이다. 공용 루트·settings.txt·백업/임시 파일은 SYSTEM/Administrators만 수정한다. credentials는 읽기도 동일하게 제한한다.
@@ -72,7 +79,7 @@
 
 ## 터널 주소 유지 (v1.8.16)
 
-- 소스 SDK는 D:\src\SSHTunnel 한 곳의 1.5.0 이상을 사용한다. 빌드에서 identity.go를 확인한다.
+- 소스 SDK는 프로젝트의 형제 폴더 `SSHTunnel` 한 곳의 1.5.0 이상을 사용한다. 빌드에서 identity.go를 확인한다.
 - helper는 Identity를 remotecontrol로 고정한다. 내부 MCP 프록시의 임시 포트, 화면 포트, 표시 이름으로 신원을 만들지 않는다.
 - 식별키는 SDK 기본 실행 계정 설정 폴더에 유지한다. 설치/업데이트에서 삭제하거나 재발급하지 않는다. 구형 클라이언트 최초 전환 때만 새 주소가 한 번 발급된다.
 - Test-SshTunnel.ps1의 38개 검사와 Test-SshPrivateMcp.ps1의 10개 검사로 프로세스 재시작, 포트/이름 변경, 실제 SSH 재연결, MCP 임시 포트 변경 뒤 주소 및 OAuth 유지가 확인되었다. 시험 신원은 임시 APPDATA로 격리한다.
@@ -184,7 +191,7 @@
 - `src/McpHost.cs`: 별도 LAN 포트(기본 5901), Remote ID/PW 로그인, Streamable HTTP JSON-RPC.
   기본 꺼짐. 화면/터널 포트에 명령 API를 노출하지 않는다. 설정은 `mcp_*` 키.
 - `McpTools.cs`, `McpProcesses.cs`: 파일·SHA-256·백업·소유 작업·출력·로그·화면.
-  파일 폴더 제한은 PowerShell 샌드박스가 아니다. 작업당 1시간, 동시 8개, 출력 최근 128Ki 문자.
+  작업공간은 기본 위치이며 접근 제한 목록이 아니다. 파일·전송·명시적 cwd도 작업공간 밖 로컬 경로를 사용한다. 작업당 1시간, 동시 8개, 출력 최근 128Ki 문자.
   `--mcp-job` helper의 Job Object는 그 작업의 자손만 정리한다. 프로세스 이름으로 죽이지 않는다.
 - `McpClient.cs`: LLM PC의 `--mcp-client` stdio 연결기. 로그인 갱신은 명시적인 401일 때만
   한 번 재시도한다. 전송 장애 뒤 실행 명령을 무작정 재전송하지 않는다. 업로드/다운로드는
@@ -278,7 +285,7 @@ Setup.cs           설치 관리자 (별도 어셈블리)
 
 ### 빌드
 
-프로젝트는 `D:\Src\원격제어` 한 곳이며 배포 파일은 그 아래 `dist`로 고정한다.
+현재 저장소의 루트가 프로젝트 폴더이며 배포 파일은 그 아래 `dist`로 고정한다.
 
 ```powershell
 .\빌드.ps1                          # dist/RemoteControl.exe

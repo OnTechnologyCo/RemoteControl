@@ -1,4 +1,4 @@
-// LLM PC에서 실행하는 stdio 연결기. 대상 PC에는 인터넷/OAuth/Node 설치가 필요 없다.
+﻿// LLM PC에서 실행하는 stdio 연결기. 대상 PC에는 인터넷/OAuth/Node 설치가 필요 없다.
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -58,7 +58,7 @@ namespace RemoteControl
             {
                 var p=McpJson.Obj(rpc,"params");string name=Json.Str(p,"name");var a=McpJson.Obj(p,"arguments");
                 if(name=="pc_upload_file"||name=="pc_download_file")
-                {try{return McpJson.Result(id,name=="pc_upload_file"?Upload(a):Download(a));}catch(Exception ex){return McpJson.Result(id,McpJson.ToolError(ex.Message));}}
+                {try{return McpJson.Result(id,name=="pc_upload_file"?Upload(a):Download(a));}catch(Exception ex){return McpJson.Result(id,McpJson.ToolError(ex));}}
             }
             var response=Remote(rpc);
             if(method=="tools/list"&&response.ContainsKey("result"))
@@ -71,7 +71,7 @@ namespace RemoteControl
         }
         private static object TransferTool(bool upload)
         {
-            var props=new Dictionary<string,object>();props["local_path"]=new{type="string",description="Absolute file path on the LLM PC"};props["remote_path"]=new{type="string",description="Absolute file path inside the target PC's configured work folders"};
+            var props=new Dictionary<string,object>();props["local_path"]=new{type="string",description="Absolute file path on the LLM PC"};props["remote_path"]=new{type="string",description="Absolute local file path on the target PC; may be outside configured workspaces"};
             if(upload)props["expected_sha256"]=new{type="string",description="Current REMOTE file hash, required to replace an existing file. A remote backup is retained."};
             return new{name=upload?"pc_upload_file":"pc_download_file",description=upload?
                 "Stream a compiled binary or other file from the LLM PC to the remote PC, up to 4GiB. Verifies SHA-256; never sends binary data through model context. Create the destination folder first.":
@@ -98,7 +98,7 @@ namespace RemoteControl
             string local=McpPath.Absolute(McpTools.Required(a,"local_path")),remote=McpTools.Required(a,"remote_path");
             if(File.Exists(local))throw new IOException("로컬 파일이 이미 있습니다. 다른 저장 이름을 지정하세요.");
             var reply=Remote(new{jsonrpc="2.0",id="download-info",method="tools/call",@params=new{name="pc_get_file_info",arguments=new{path=remote}}});
-            var result=McpJson.Obj(reply,"result");if(Json.Bool(result,"isError",false)||reply.ContainsKey("error"))throw new IOException("원격 파일 정보를 읽지 못했습니다. 경로와 허용 폴더를 확인하세요.");
+            var result=McpJson.Obj(reply,"result");if(Json.Bool(result,"isError",false))return result;if(reply.ContainsKey("error"))throw new IOException(RemoteError(reply));
             Dictionary<string,object> info=null;foreach(var c in (IEnumerable)result["content"]) {var item=c as Dictionary<string,object>;if(item!=null&&Json.Str(item,"type")=="text"){info=McpJson.Read(Json.Str(item,"text"));break;}}
             if(info==null)throw new IOException("파일 정보가 없습니다.");
             string temp=local+".mcp-download-"+Guid.NewGuid().ToString("N")+".tmp";
@@ -108,6 +108,14 @@ namespace RemoteControl
                 if(!string.Equals(McpTools.FileHash(temp),Json.Str(info,"sha256"),StringComparison.OrdinalIgnoreCase))throw new IOException("다운로드 중 파일이 변경되었거나 SHA-256이 다릅니다. 다시 확인하세요.");
                 File.Move(temp,local);return McpJson.Text(McpTools.Info(local));
             }finally{if(File.Exists(temp))File.Delete(temp);}
+        }
+        private static string RemoteError(Dictionary<string,object> reply)
+        {
+            var result=McpJson.Obj(reply,"result"); object content;
+            if(result.TryGetValue("content",out content) && content is IEnumerable)
+                foreach(var value in (IEnumerable)content) { var item=value as Dictionary<string,object>; if(item!=null && Json.Str(item,"type")=="text") return Json.Str(item,"text"); }
+            string message=Json.Str(McpJson.Obj(reply,"error"),"message");
+            return string.IsNullOrEmpty(message)?"원격 파일 정보를 읽지 못했습니다. 서버 응답과 경로를 확인하세요.":message;
         }
         private HttpWebRequest Request(string path,string method)
         {
