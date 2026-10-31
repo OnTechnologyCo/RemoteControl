@@ -119,7 +119,12 @@ namespace RemoteControlSecrets
             if (File.Exists(destination)) { ReadFrom(directory); return; }
             if (!File.Exists(previousExecutable)) return;
             // 구버전을 실행하거나 속성 getter를 호출하지 않고 상수 메타데이터만 읽는다.
-            var assembly = Assembly.ReflectionOnlyLoadFrom(previousExecutable);
+            // ReflectionOnlyLoadFrom keeps the old EXE mapped until this installer exits.
+            // Read metadata from memory so the next extraction can overwrite the same file.
+            byte[] image = File.ReadAllBytes(previousExecutable);
+            Assembly assembly;
+            try { assembly = Assembly.ReflectionOnlyLoad(image); }
+            finally { Array.Clear(image, 0, image.Length); }
             var type = assembly.GetType("RemoteControl.Notify", false);
             var field = type == null ? null : type.GetField("BotToken", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
             if (field == null || !field.IsLiteral || field.FieldType != typeof(string)) return;
