@@ -71,9 +71,21 @@ namespace RemoteControl
         /// </summary>
         private static bool TurnedOff { get { return Config.Get("tgoff") == "1"; } }
 
+        private static DateTime brokerChecked;
+        private static bool brokerConfigured;
+
         internal static bool IsConfigured
         {
-            get { return HasBot && !TurnedOff && ChatId.Length > 0; }
+            get {
+                if (!RemoteControlSecrets.ConfigProtection.IsAdministrator) {
+                    if (DateTime.UtcNow - brokerChecked > TimeSpan.FromSeconds(5)) {
+                        brokerConfigured = NotifyBroker.Request("status") == "configured";
+                        brokerChecked = DateTime.UtcNow;
+                    }
+                    return brokerConfigured;
+                }
+                return HasBot && !TurnedOff && ChatId.Length > 0;
+            }
         }
 
         /// <summary>어디로 보낼까. 이것만 쓰는 사람이 정한다.</summary>

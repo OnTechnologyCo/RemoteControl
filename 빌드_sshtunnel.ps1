@@ -1,5 +1,6 @@
 ﻿$ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
+. (Join-Path $root 'build\Use-GoToolchain.ps1')
 $module = Join-Path $root 'sshtunnel-client'
 $sdk = Join-Path (Split-Path -Parent $root) 'SSHTunnel\pkg\tunnel\tunnel.go'
 if (-not (Test-Path -LiteralPath $sdk)) { throw 'SSHTunnel source is required beside this project (../SSHTunnel).' }
@@ -18,6 +19,7 @@ try {
     & go build -mod=readonly -trimpath -ldflags '-w' -o $out .
     if ($LASTEXITCODE -ne 0) { throw 'SSHTunnel client build failed' }
 } finally { Pop-Location }
+Assert-GoBinary $out
 $inputFile = [IO.File]::OpenRead($out)
 $outputFile = [IO.File]::Create((Join-Path $root 'sshtunnel-client.exe.gz'))
 $gzip = New-Object IO.Compression.GZipStream($outputFile,[IO.Compression.CompressionLevel]::Optimal)

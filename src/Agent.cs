@@ -1,4 +1,4 @@
-// 대리 프로세스. 서비스가 사람이 앉아 있는 세션에 SYSTEM 권한으로 밀어 넣는 쪽.
+﻿// 대리 프로세스. 서비스가 사람이 앉아 있는 세션에 SYSTEM 권한으로 밀어 넣는 쪽.
 //
 // 창이 없다. 실제로 화면을 잡고 입력을 넣고 웹을 서비스하는 것은 전부 여기다.
 // 창(MainForm)은 이 상태를 파일로 읽어 보여 주기만 한다.
@@ -16,12 +16,12 @@ namespace RemoteControl
     {
         internal static void Run()
         {
+            Config.EnsureWritable(); // Policy is protected before any privileged work.
             Native.MakeDpiAware();
             Tunnel.KillOrphans();
 
-            // SYSTEM 이 만든 설정 파일을 사용자가 못 고치면, 창에서 비밀번호를 바꿔도
-            // 조용히 실패한다. 권한이 있는 지금(SYSTEM) 맞춰 둔다.
-            Config.EnsureWritable();
+            // 트레이는 토큰을 읽지 않고 허용된 알림 동작만 서비스에 요청한다.
+            NotifyBroker.Start();
 
             SvcLog.Write("대리 프로세스 시작 (세션 " + Win.MySession() +
                          ", 데스크톱 " + Desktops.InputDesktopName() + ")");

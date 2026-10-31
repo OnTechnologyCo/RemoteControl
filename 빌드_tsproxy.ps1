@@ -1,5 +1,6 @@
 ﻿$ErrorActionPreference='Stop'
 $root=$PSScriptRoot
+. (Join-Path $root 'build\Use-GoToolchain.ps1')
 $output=Join-Path $root 'dist\tsproxy.exe'
 [void][IO.Directory]::CreateDirectory((Join-Path $root 'dist'))
 Push-Location (Join-Path $root 'tsproxy')
@@ -10,6 +11,7 @@ try {
     & go build -mod=readonly -trimpath -ldflags '-w' -o $output .
     if($LASTEXITCODE -ne 0){throw 'Tailscale helper build failed'}
 }finally{Pop-Location}
+Assert-GoBinary $output
 $inputFile=[IO.File]::OpenRead($output)
 $outFile=[IO.File]::Create((Join-Path $root 'tsproxy.exe.gz'))
 $gzip=New-Object IO.Compression.GZipStream($outFile,[IO.Compression.CompressionLevel]::Optimal)

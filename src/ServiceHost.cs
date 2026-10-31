@@ -1,4 +1,4 @@
-// 잠금 화면까지 제어하려면 서비스가 필요하다.
+﻿// 잠금 화면까지 제어하려면 서비스가 필요하다.
 //
 // 왜 서비스인가.
 //   잠금 화면(Winlogon 데스크톱)은 SYSTEM 만 열 수 있다. 보통 사용자로 실행한
@@ -52,6 +52,7 @@ namespace RemoteControl
 
             protected override void OnStart(string[] args)
             {
+                Config.EnsureWritable();
                 stop = false;
                 SvcLog.Write("서비스 시작");
 

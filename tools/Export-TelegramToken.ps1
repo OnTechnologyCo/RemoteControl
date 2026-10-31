@@ -3,7 +3,9 @@
 param([string]$Destination = (Join-Path ([Environment]::GetFolderPath('Desktop')) '원격제어_텔레그램_토큰등록.ps1'), [switch]$ReplaceExisting)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot
-$source = [IO.File]::ReadAllText((Join-Path $root 'src\TelegramCredentials.cs'))
+$parts=@('src\TelegramCredentials.cs','src\ConfigProtection.cs') | ForEach-Object {[IO.File]::ReadAllText((Join-Path $root $_))}
+$imports=($parts | ForEach-Object {[regex]::Matches($_,'(?m)^using [^;]+;') | ForEach-Object {$_.Value}} | Select-Object -Unique) -join "`n"
+$source=$imports+"`n"+(($parts | ForEach-Object {[regex]::Replace($_,'(?m)^using [^;]+;','')}) -join "`n")
 Add-Type -TypeDefinition ($source + @'
 public static class RemoteControlTokenExport {
  public static string Read() { return RemoteControlSecrets.TelegramCredentials.Read(); }

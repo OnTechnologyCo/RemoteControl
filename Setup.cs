@@ -1,4 +1,4 @@
-// 원격제어 설치 관리자. 한 파일로 끝난다 (본체를 안에 넣고 다닌다).
+﻿// 원격제어 설치 관리자. 한 파일로 끝난다 (본체를 안에 넣고 다닌다).
 
 //
 
@@ -82,7 +82,7 @@ namespace RemoteControlSetup
 
         internal const string Product = "원격제어";
 
-        internal const string Version = "1.9.0";
+        internal const string Version = "1.9.1";
 
         internal const string ExeName = "RemoteControl.exe";
 
@@ -800,6 +800,7 @@ namespace RemoteControlSetup
             WebMcp.Preflight(o, say);
             LanWebMcp.Preflight(o, say);
 
+            PrepareDataDir(say); // Fail before replacing binaries if ACL migration cannot be completed.
             if (string.IsNullOrWhiteSpace(o.TelegramToken))
                 RemoteControlSecrets.TelegramCredentials.PreserveFrom(Path.Combine(o.Dir, App.ExeName));
             else {
@@ -1073,54 +1074,10 @@ namespace RemoteControlSetup
         }
 
         private static void PrepareDataDir(Say say)
-
         {
-
-            try
-
-            {
-
-                string dir = Path.Combine(
-
-                    Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "RemoteControl");
-
-
-
-                Directory.CreateDirectory(dir);
-
-
-
-                System.Security.AccessControl.DirectorySecurity sec = Directory.GetAccessControl(dir);
-
-
-
-                sec.AddAccessRule(new System.Security.AccessControl.FileSystemAccessRule(
-
-                    new System.Security.Principal.SecurityIdentifier(
-
-                        System.Security.Principal.WellKnownSidType.BuiltinUsersSid, null),
-
-                    System.Security.AccessControl.FileSystemRights.Modify,
-
-                    System.Security.AccessControl.InheritanceFlags.ContainerInherit |
-
-                    System.Security.AccessControl.InheritanceFlags.ObjectInherit,
-
-                    System.Security.AccessControl.PropagationFlags.None,
-
-                    System.Security.AccessControl.AccessControlType.Allow));
-
-
-
-                Directory.SetAccessControl(dir, sec);
-
-            }
-
-            catch (Exception ex) { say("  설정 폴더 권한을 주지 못했습니다: " + ex.Message); }
-
+            string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "RemoteControl");
+            RemoteControlSecrets.ConfigProtection.PrepareDataDirectory(dir);
         }
-
-
 
         /// <summary>
 

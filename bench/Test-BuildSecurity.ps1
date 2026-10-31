@@ -51,7 +51,7 @@ static int Main(string[] args){
 }}
 '@ | Set-Content $testSource -Encoding UTF8
 $test=Join-Path $work 'test.exe'
-& $csc /nologo /target:exe /r:System.Security.dll "/out:$test" $testSource (Join-Path $root 'src\TelegramCredentials.cs')
+& $csc /nologo /target:exe /r:System.Security.dll "/out:$test" $testSource (Join-Path $root 'src\TelegramCredentials.cs') (Join-Path $root 'src\ConfigProtection.cs')
 if($LASTEXITCODE-ne 0){throw 'Credential test compile failed'}
 & $test $work $old
 if($LASTEXITCODE-ne 0){throw 'Credential preservation tests failed'}

@@ -1,6 +1,6 @@
 module ontech/remotecontrol-sshtunnel
 
-go 1.26.9
+go 1.27.3
 
 require ontech/sshtunnel v0.0.0
 
