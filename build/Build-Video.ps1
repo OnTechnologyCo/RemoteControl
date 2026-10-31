@@ -1,8 +1,9 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param()
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'Verify-Inputs.ps1')
+. (Join-Path $PSScriptRoot 'Use-GoToolchain.ps1')
 $pins = (Get-Content (Join-Path $PSScriptRoot 'dependencies.json') -Raw -Encoding UTF8 | ConvertFrom-Json).ffmpeg
 $cache = Join-Path $root 'artifacts\video-deps'
 [IO.Directory]::CreateDirectory($cache) | Out-Null
@@ -22,6 +23,7 @@ try {
     & go build -mod=readonly -trimpath -ldflags '-w' -o $helper .
     if ($LASTEXITCODE -ne 0) { throw 'WebRTC helper build failed' }
 } finally { Pop-Location }
+Assert-GoBinary $helper
 foreach ($pair in @(@($helper,'video-helper.exe.gz'), @($ffmpeg,'video-ffmpeg.exe.gz'))) {
     $inputFile = [IO.File]::OpenRead($pair[0])
     $outputFile = [IO.File]::Create((Join-Path $root $pair[1]))

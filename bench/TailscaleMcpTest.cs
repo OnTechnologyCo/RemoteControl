@@ -21,7 +21,7 @@ internal static class TailscaleMcpTest
     {
         string root=Path.GetFullPath(args[0]);Directory.CreateDirectory(root);
         string settings=Path.Combine(root,"settings.txt"),active=Path.Combine(root,"active.json");
-        typeof(Config).GetField("Path0",Hidden).SetValue(null,settings);Config.Reload();
+        typeof(Config).GetField("Path0",Hidden).SetValue(null,settings);Config.EnsureWritable();Config.Reload();
         Set("StateDir",root);File.WriteAllText(active,"{}");
         Config.SetMany(new Dictionary<string,string>{{"pwhash","fixture"},{"mcp_enabled","1"},{"mcp_web_mode","ddns"},{"mcp_web_url","https://manual.example.test:59443"},{"mcp_ts_port","8443"}});
         string address="https://fixture.example.ts.net:8443";

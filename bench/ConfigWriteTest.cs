@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -22,6 +22,7 @@ namespace RemoteControl
                     for (int i = 0; i < 25; i++) Config.SetMany(new Dictionary<string, string> { { args[0], i.ToString() } });
                     return 0;
                 }
+                Config.EnsureWritable();
                 Config.SetMany(new Dictionary<string, string> { { "port", "5900" }, { "tunnel", "private" }, { "extauto", "0" } });
                 Config.Reload(); Check(Config.Port == 5900 && Config.Get("tunnel") == "private", "grouped settings survive reload");
                 using (var a = Worker("a")) using (var b = Worker("b"))

@@ -185,6 +185,7 @@ $args = @(
     "/resource:" + (Join-Path $buildDir 'RemoteControl_WebMCP.zip') + ",RemoteControl_WebMCP.zip"
     (Join-Path $root "Setup.cs")
     (Join-Path $root "src\TelegramCredentials.cs")
+    (Join-Path $root "src\ConfigProtection.cs")
     (Join-Path $root "SetupLayout.cs")
     (Join-Path $root "SetupWebForm.cs")
     (Join-Path $root "SetupLanMcp.cs")

@@ -18,6 +18,7 @@ namespace RemoteControlSecrets
 
         internal static string Read()
         {
+            if (!ConfigProtection.IsAdministrator) return "";
             string value = Environment.GetEnvironmentVariable("REMOTE_CONTROL_TELEGRAM_BOT_TOKEN");
             if (!string.IsNullOrWhiteSpace(value)) return value.Trim();
             try { return ReadFrom(DirectoryPath); }
@@ -62,6 +63,8 @@ namespace RemoteControlSecrets
             CheckEnvironment(token);
             string destination = Path.Combine(directory, "telegram-token.dpapi");
             CheckPath(directory); CheckPath(destination);
+            ConfigProtection.RequireAdministrator();
+            if (Directory.Exists(directory)) CheckOwnerAndWrites(directory, true);
             if (File.Exists(destination)) {
                 string previous = ReadFrom(directory); // 손상/권한 오류를 미등록으로 취급하지 않는다.
                 if (previous == token) return;
@@ -76,15 +79,12 @@ namespace RemoteControlSecrets
 
         internal static DirectorySecurity CredentialDirectorySecurity()
         {
-            var acl = new DirectorySecurity();
-            var admins = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
-            acl.SetOwner(admins);
-            acl.SetAccessRuleProtection(true, false);
-            InheritanceFlags inherit = InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit;
-            acl.AddAccessRule(new FileSystemAccessRule(admins, FileSystemRights.FullControl, inherit, PropagationFlags.None, AccessControlType.Allow));
-            acl.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null), FileSystemRights.FullControl, inherit, PropagationFlags.None, AccessControlType.Allow));
-            acl.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null), FileSystemRights.ReadAndExecute, inherit, PropagationFlags.None, AccessControlType.Allow));
-            return acl;
+            return ConfigProtection.DirectoryAcl(true);
+        }
+
+        internal static void HardenExisting(string directory)
+        {
+            if (Directory.Exists(directory)) ConfigProtection.HardenDirectory(directory, true);
         }
 
         private static void WriteEncrypted(string directory, string token, bool replaceExisting)
@@ -113,6 +113,8 @@ namespace RemoteControlSecrets
         internal static void PreserveFrom(string previousExecutable, string directory)
         {
             string destination = Path.Combine(directory, "telegram-token.dpapi");
+            ConfigProtection.RequireAdministrator();
+            HardenExisting(directory);
             // 기존 암호화 자격 증명은 검증만 한다. 갱신·재발급·덮어쓰기는 하지 않는다.
             if (File.Exists(destination)) { ReadFrom(directory); return; }
             if (!File.Exists(previousExecutable)) return;
@@ -126,16 +128,7 @@ namespace RemoteControlSecrets
             if (!Regex.IsMatch(token, @"\A[0-9]{6,}:[A-Za-z0-9_-]{20,}\z")) throw new IOException("기존 알림 토큰 형식을 확인할 수 없습니다. 기존 본체를 보존합니다.");
             CheckPath(directory);
             Directory.CreateDirectory(directory);
-            var acl = new DirectorySecurity();
-            var admins = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
-            acl.SetOwner(admins);
-            acl.SetAccessRuleProtection(true, false);
-            InheritanceFlags inherit = InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit;
-            acl.AddAccessRule(new FileSystemAccessRule(admins, FileSystemRights.FullControl, inherit, PropagationFlags.None, AccessControlType.Allow));
-            acl.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null), FileSystemRights.FullControl, inherit, PropagationFlags.None, AccessControlType.Allow));
-            // 트레이 UI도 기존 알림을 사용한다. 로컬 읽기는 허용하되 실행 파일·다른 PC에는 토큰을 싣지 않는다.
-            acl.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null), FileSystemRights.ReadAndExecute, inherit, PropagationFlags.None, AccessControlType.Allow));
-            Directory.SetAccessControl(directory, acl);
+            Directory.SetAccessControl(directory, CredentialDirectorySecurity());
             CheckOwnerAndWrites(directory, true);
             byte[] plain = Encoding.UTF8.GetBytes(token);
             byte[] encrypted;
@@ -147,25 +140,8 @@ namespace RemoteControlSecrets
             if (ReadFrom(directory) != token) throw new IOException("알림 자격 증명 이관 검증 실패. 기존 본체를 보존합니다.");
         }
 
-        private static void CheckPath(string path)
-        {
-            for (string part = Path.GetFullPath(path); part != null; part = Path.GetDirectoryName(part))
-                if ((File.Exists(part) || Directory.Exists(part)) && (File.GetAttributes(part) & FileAttributes.ReparsePoint) != 0)
-                    throw new IOException("자격 증명 경로에 재분석 지점을 사용할 수 없습니다.");
-        }
-
+        private static void CheckPath(string path) { ConfigProtection.CheckPath(path); }
         private static void CheckOwnerAndWrites(string path, bool directory)
-        {
-            FileSystemSecurity acl = directory ? (FileSystemSecurity)Directory.GetAccessControl(path) : File.GetAccessControl(path);
-            var owner = acl.GetOwner(typeof(SecurityIdentifier)) as SecurityIdentifier;
-            if (!Trusted(owner)) throw new IOException("자격 증명 파일 소유자 검증 실패.");
-            FileSystemRights writes = FileSystemRights.Write | FileSystemRights.Delete | FileSystemRights.DeleteSubdirectoriesAndFiles | FileSystemRights.ChangePermissions | FileSystemRights.TakeOwnership;
-            foreach (FileSystemAccessRule rule in acl.GetAccessRules(true, true, typeof(SecurityIdentifier)))
-                if (rule.AccessControlType == AccessControlType.Allow && (rule.FileSystemRights & writes) != 0 && !Trusted(rule.IdentityReference as SecurityIdentifier))
-                    throw new IOException("자격 증명 파일에 일반 사용자 쓰기 권한이 있습니다.");
-        }
-
-        private static bool Trusted(SecurityIdentifier sid)
-        { return sid != null && (sid.IsWellKnown(WellKnownSidType.LocalSystemSid) || sid.IsWellKnown(WellKnownSidType.BuiltinAdministratorsSid)); }
+        { ConfigProtection.Verify(path, directory, true); }
     }
 }

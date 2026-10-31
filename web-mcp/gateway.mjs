@@ -403,9 +403,9 @@ function createOriginGateway(c, { directory, upstream, metadata = getClientMetad
   app.get('/.well-known/oauth-authorization-server', (req,res)=>res.json(oauth));
   app.get(['/.well-known/oauth-protected-resource','/.well-known/oauth-protected-resource/mcp'], (req,res)=>res.json(resourceMetadata));
   app.get('/', (req,res)=>res.type('text').send('RemoteControl · WebMCP 연결 주소: ' + provider.resource));
-  app.post('/connect', limits.logins, express.urlencoded({extended:false,limit:'8kb',parameterLimit:8}), (req,res,next)=>provider.login(req,res).catch(next));
+  app.post('/connect', limits.logins, express.urlencoded({inflate:false,extended:false,limit:'8kb',parameterLimit:8}), (req,res,next)=>provider.login(req,res).catch(next));
   // OAuth 요청과 MCP 요청은 본문 제한이 다르다. 인증 경로에서 큰 JSON을 먼저 읽지 않는다.
-  app.use(['/authorize','/token','/register','/revoke'], express.urlencoded({extended:false,limit:'16kb',parameterLimit:20}), express.json({limit:'16kb'}));
+  app.use(['/authorize','/token','/register','/revoke'], express.urlencoded({inflate:false,extended:false,limit:'16kb',parameterLimit:20}), express.json({inflate:false,limit:'16kb'}));
   app.use('/token', (req, res, next) => {
     // SDK는 OAuthError를 모두 400으로 보낸다. 임시 오프라인은 재로그인 대신 갱신을 재시도할 수 있게 503으로 구분한다.
     const json = res.json.bind(res);
@@ -442,6 +442,6 @@ function createOriginGateway(c, { directory, upstream, metadata = getClientMetad
     } catch(error) { next(error); }
   });
   app.use((req,res)=>res.status(404).json({error:'Not found'}));
-  app.use((error,req,res,next)=> { if(res.headersSent)return next(error); res.status(error.status === 413 ? 413 : error.status === 400 ? 400 : 502).json({error:'Request failed; operation was not retried'}); });
+  app.use((error,req,res,next)=> { if(res.headersSent)return next(error); res.status(error.status === 413 ? 413 : error.status === 400 ? 400 : error.status === 415 ? 415 : 502).json({error:'Request failed; operation was not retried'}); });
   return {app, provider, close:()=>provider.close()};
 }

@@ -4,6 +4,7 @@ import {mkdtempSync, mkdirSync, readFileSync} from 'node:fs';
 import {join, resolve} from 'node:path';
 import {createServer, request} from 'node:http';
 import {once} from 'node:events';
+import {gzipSync, deflateSync, brotliCompressSync} from 'node:zlib';
 import {randomBytes, createHash} from 'node:crypto';
 import {createGateway, callbackName, CALLBACK, CIMD, CLAUDE_CALLBACK, CLAUDE_CIMD} from '../gateway.mjs';
 
@@ -23,7 +24,7 @@ async function fixture(t, lan) {
   const server=createServer((req,res)=>gateway.app(req,res));server.listen(0,'127.0.0.1');await once(server,'listening');
   t.after(()=>{gateway.close();server.closeAllConnections();server.close();});
   const send=(path,body,extra={})=>new Promise((resolve,reject)=>{
-    const data=body===undefined?undefined:typeof body==='string'?body:JSON.stringify(body);
+    const data=body===undefined?undefined:typeof body==='string'||Buffer.isBuffer(body)?body:JSON.stringify(body);
     const req=request({hostname:'127.0.0.1',port:server.address().port,path,method:data===undefined?'GET':'POST',
       headers:{Host:new URL(config.publicUrl).host,'X-RC-Proxy-Key':config.proxyKey,'X-RC-Client-IP':lan?'10.20.30.55':'198.51.100.2',
         'X-Forwarded-Proto':'https','Content-Type':'application/json',...extra,...(data?{'Content-Length':Buffer.byteLength(data)}:{})}},res=>{
@@ -116,4 +117,19 @@ test('public DCR rejects non-loopback / mixed callbacks and keeps official web i
   assert.equal(await f.provider().clientsStore.getClient('http://localhost:48123/client.json'),undefined);
   assert.equal(await f.provider().clientsStore.getClient('https://attacker.test/client.json'),undefined);
   assert.deepEqual(f.fetched,[]);
+});
+
+test('OAuth compressed and malformed bodies are rejected without killing the isolated gateway',async t=>{
+  const f=await fixture(t,false);
+  for(const [encoding,compress] of [['gzip',gzipSync],['deflate',deflateSync],['br',brotliCompressSync]]){
+    for(const path of ['/connect','/register','/token','/revoke','/authorize']){
+      const form=path==='/connect';
+      const data=Buffer.concat([compress(Buffer.from(form?'user=fixture':'{}')),Buffer.from('invalid-trailer')]);
+      const result=await f.send(path,data,{'Content-Encoding':encoding,'Content-Type':form?'application/x-www-form-urlencoded':'application/json'});
+      assert.equal(result.status,415,`${path} ${encoding}: ${result.text}`);
+      assert.equal((await f.send('/.well-known/oauth-authorization-server')).status,200);
+    }
+  }
+  const plain=await f.send('/register',{redirect_uris:['http://localhost:48123/callback'],token_endpoint_auth_method:'none',grant_types:['authorization_code','refresh_token'],response_types:['code']});
+  assert.equal(plain.status,201,plain.text);
 });

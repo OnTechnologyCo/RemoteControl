@@ -1,3 +1,12 @@
+## 보안 설정 / 자격 증명 경계 (v1.9.1)
+
+- 아래 과거 기록의 Users:Modify 및 토큰 읽기 허용 설명은 더 이상 적용되지 않는다. `ConfigProtection`은 설치/서비스 공통 ACL 구현이다. 공용 루트·settings.txt·백업/임시 파일은 SYSTEM/Administrators만 수정한다. credentials는 읽기도 동일하게 제한한다.
+- 인증/MCP/터널 정책을 사용자 UI 파일에서 읽거나 exe 옆/임시 폴더로 폴백하지 않는다. 권한/소유자/경로 검증 실패는 기본 인증으로 대체하지 않는다. 기존 비밀번호·DPAPI 암호문은 보존한다.
+- 일반 UI는 읽기 전용 정책과 별도 사용자 창 위치 설정을 쓴다. 정책 변경은 `--admin-ui` UAC 경로에서 수행하며 명령줄로 비밀번호를 전달하지 않는다. 관리자 UI는 사용자 쓰기 가능한 UI 파일에 쓰지 않는다.
+- NotifyBroker는 로컬 대화형 호출자의 `status`/`send-addresses`만 허용한다. 수신자·본문·토큰은 IPC 입력/출력에 포함하지 않는다. 테스트는 합성 발송 콜백만 사용한다.
+- `bench/Test-SecurityPolicy.ps1`: 격리 폴더 + 기존 대화형 사용자의 비관리자 토큰으로 수정 전 재현/수정 후 거부/정상 로그인을 검사한다. 계정이나 운영 서비스는 만들거나 변경하지 않는다. 토큰을 확보하지 못하면 실패로 보고한다.
+- `build/Use-GoToolchain.ps1`과 세 go.mod의 Go 1.27.3을 함께 유지한다. helper 빌드 버전 검증을 우회하지 않는다. npm은 lockfile로 설치하고 `npm audit fix --force`를 사용하지 않는다.
+
 ## GPU 영상 / JPEG 호환 경로 (v1.9.0)
 
 - `video-helper`는 인증된 뷰어별 전용 stdio 협상만 받는다. 별도 제어 HTTP 포트를 열거나 브라우저가 FFmpeg 경로·명령 인자를 지정하게 하지 않는다.

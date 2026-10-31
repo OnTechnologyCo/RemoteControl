@@ -1,4 +1,4 @@
-// 원격제어 - 본체.
+﻿// 원격제어 - 본체.
 
 //
 
@@ -90,6 +90,8 @@ namespace RemoteControl
 
 
 
+        private static bool administratorWindow;
+
         private bool svcMode;          // 서비스가 돌고 있어 우리가 서버를 열지 않는 상태
 
 
@@ -107,6 +109,13 @@ namespace RemoteControl
             switch (mode)
 
             {
+
+                case "--admin-ui":
+                    if (!RemoteControlSecrets.ConfigProtection.IsAdministrator) return 5;
+                    Config.EnsureWritable();
+                    administratorWindow = true;
+                    Native.MakeDpiAware(); Application.EnableVisualStyles();
+                    Application.Run(new MainForm(false)); return 0;
 
                 case "--mcp-client":
 
@@ -208,6 +217,13 @@ namespace RemoteControl
 
 
 
+            if (RemoteControlSecrets.ConfigProtection.IsAdministrator) Config.EnsureWritable();
+            else if (!ServiceHost.IsRunning())
+            {
+                try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Assembly.GetExecutingAssembly().Location, "--admin-ui") { UseShellExecute = true, Verb = "runas" }); return 0; }
+                catch { return 5; }
+            }
+
             // 배율이 걸린 화면에서 좌표가 어긋나지 않게 가장 먼저 선언한다.
 
             Native.MakeDpiAware();
@@ -300,7 +316,7 @@ namespace RemoteControl
 
         /// <summary>이 프로그램의 판 번호. 창 제목과 머리글에 보인다.</summary>
 
-        internal const string Version = "1.9.0";
+        internal const string Version = "1.9.1";
 
 
 
@@ -329,6 +345,10 @@ namespace RemoteControl
             BuildUi();
 
             BuildTray();
+            if (!RemoteControlSecrets.ConfigProtection.IsAdministrator) {
+                txtUser.ReadOnly = true; txtPass.Enabled = false; numPort.Enabled = false;
+                cboScreen.Enabled = false; chkKeep.Enabled = false; btnApply.Text = "관리자 설정";
+            }
 
 
 
@@ -336,7 +356,7 @@ namespace RemoteControl
 
 
 
-            Tunnel.EnsureMachineKey();
+            if (RemoteControlSecrets.ConfigProtection.IsAdministrator) Tunnel.EnsureMachineKey();
 
             svcMode = ServiceHost.IsRunning();
 
@@ -384,7 +404,7 @@ namespace RemoteControl
 
 
 
-            StartWakeWatcher();
+            if (!administratorWindow) StartWakeWatcher();
 
 
 
@@ -400,6 +420,10 @@ namespace RemoteControl
 
             if (!svcMode) EnableTunnelGuard();
 
+            int savedX, savedY;
+            if (UiPreferences.LoadPosition(out savedX, out savedY) && Screen.AllScreens.Length > 0 &&
+                Array.Exists(Screen.AllScreens, delegate(Screen screen) { return screen.WorkingArea.Contains(new Point(savedX, savedY)); }))
+            { StartPosition = FormStartPosition.Manual; Location = new Point(savedX, savedY); }
             Shown += delegate { UpdateStatus(); };
 
 
@@ -408,6 +432,8 @@ namespace RemoteControl
 
             {
 
+                try { UiPreferences.SavePosition(Location.X, Location.Y); } catch { }
+                if (administratorWindow) exiting = true;
                 // [X] 는 종료가 아니라 트레이로 숨기기. 원격제어는 창을 닫아도
 
                 // 계속 대기해야 쓸모가 있다.
@@ -855,6 +881,7 @@ namespace RemoteControl
 
             {
 
+                if (!RequireAdminSettings()) return;
                 using (BridgeForm f = new BridgeForm()) f.ShowDialog(this);
 
 
@@ -882,7 +909,7 @@ namespace RemoteControl
             // ---- 외부망 ----
 
             var mcpLink = new LinkLabel { Text = "LLM / MCP 설정 · LAN 및 웹 ChatGPT / Claude 연결", Location = new Point(14,132), Size = new Size(490,20), Font = fS, LinkColor = Color.FromArgb(34,211,238) };
-            mcpLink.LinkClicked += delegate { using(var form=new McpForm(delegate {
+            mcpLink.LinkClicked += delegate { if (!RequireAdminSettings()) return; using(var form=new McpForm(delegate {
 
                 if(!svcMode)return server.McpNote;
 
@@ -925,7 +952,7 @@ namespace RemoteControl
             Button settings = Btn("연결 설정", 350, 24, 156, Color.FromArgb(51, 65, 85), fS);
 
             settings.Click += delegate {
-
+                if (!RequireAdminSettings()) return;
                 Config.Reload();
 
                 using (TunnelForm form = new TunnelForm())
@@ -962,6 +989,7 @@ namespace RemoteControl
 
             {
 
+                if (!RequireAdminSettings()) return;
                 using (NotifyForm f = new NotifyForm()) f.ShowDialog(this);
 
 
@@ -1080,6 +1108,7 @@ namespace RemoteControl
 
             {
 
+                if (!RequireAdminSettings()) return;
                 Config.Set("keepdesktop", chkKeep.Checked ? "1" : "0");
 
                 Log(chkKeep.Checked
@@ -1317,6 +1346,16 @@ namespace RemoteControl
             miExt.Click += delegate { Copy(CurrentUrl()); };
 
             menu.Items.Add(miExt);
+            var notifyAddresses = new ToolStripMenuItem("텔레그램으로 접속 주소 보내기");
+            notifyAddresses.Click += delegate
+            {
+                ThreadPool.QueueUserWorkItem(delegate
+                {
+                    string result = NotifyBroker.Request("send-addresses");
+                    try { BeginInvoke((MethodInvoker)delegate { Log(result == "sent" ? "접속 주소를 전송했습니다." : "주소 전송 결과: " + result); }); } catch { }
+                });
+            };
+            menu.Items.Add(notifyAddresses);
 
 
 
@@ -1644,7 +1683,7 @@ namespace RemoteControl
 
             // 서비스가 같은 포트를 열어야 하므로 창 쪽 서버와 터널을 먼저 접는다.
 
-            Tunnel.EnsureMachineKey();
+            if (RemoteControlSecrets.ConfigProtection.IsAdministrator) Tunnel.EnsureMachineKey();
 
             TunnelGuard.Disable();
 
@@ -1720,9 +1759,22 @@ namespace RemoteControl
 
 
 
+        private bool RequireAdminSettings()
+        {
+            if (RemoteControlSecrets.ConfigProtection.IsAdministrator) return true;
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Assembly.GetExecutingAssembly().Location, "--admin-ui") { UseShellExecute = true, Verb = "runas" });
+                Log("관리자 설정 창에서 변경해 주세요.");
+            }
+            catch (Exception ex) { MessageBox.Show(this, "관리자 설정 창을 열지 못했습니다: " + ex.Message); }
+            return false;
+        }
+
         private void Apply()
 
         {
+            if (!RequireAdminSettings()) return;
 
             string pw = txtPass.Text;
 
@@ -1905,6 +1957,7 @@ namespace RemoteControl
         private void ToggleTunnel()
 
         {
+            if (!RequireAdminSettings()) return;
 
             try
 
@@ -2029,6 +2082,7 @@ namespace RemoteControl
         private void ApplyScreenSize()
 
         {
+            if (!RequireAdminSettings()) return;
 
             if (cboScreen.SelectedIndex <= 0)
 
