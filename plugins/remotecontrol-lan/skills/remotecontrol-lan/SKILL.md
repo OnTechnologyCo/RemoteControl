@@ -8,9 +8,13 @@ the LLM PC must reach its configured LAN IP and MCP port. Authentication is the
 target's existing RemoteControl ID/PW. Never request an OAuth token for the target.
 
 Call `pc_get_status` first and identify the hostname and execution account.
-Keep local source/build paths distinct from remote deployment paths. File tools
-operate under the target's configured work folders. Commands run with the target
-agent's Windows rights; folder restrictions are not a shell sandbox.
+Keep local source/build paths distinct from remote deployment paths. Configured workspace directories are default working locations, not access
+restrictions. File tools, transfers, program paths and an explicit command cwd may
+use any absolute local path under the target agent's Windows account permissions.
+Do not report insufficient permission merely because a path is outside a workspace.
+Use the actual tool result: ACCESS_DENIED, NOT_FOUND, INVALID_ARGUMENT and
+CAPABILITY_DISABLED have different meanings. File tools do not follow junctions or
+symlinks; use the actual destination path. Commands are not a filesystem sandbox.
 
 For a repair:
 

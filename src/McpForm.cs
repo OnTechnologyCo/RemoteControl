@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -13,25 +13,25 @@ namespace RemoteControl
     {
         private CheckBox enabled, commands, screen;
         private NumericUpDown port;
-        private TextBox roots, networks;
+        private TextBox workspaces, networks;
         private Label status;
         private readonly Func<string> readStatus;
         private readonly System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer();
         internal McpForm(Func<string> getStatus)
         {
-            readStatus=getStatus;Text="LLM / MCP 설정 · 이 PC에서 작업 허용";ClientSize=new Size(620,625);
+            readStatus=getStatus;Text="LLM / MCP 설정 · 연결과 작업공간";ClientSize=new Size(620,625);
             Font=new Font("맑은 고딕",9);StartPosition=FormStartPosition.CenterParent;FormBorderStyle=FormBorderStyle.FixedDialog;MaximizeBox=false;MinimizeBox=false;
-            Config.Reload();McpOptions o;try{o=McpOptions.Load();}catch{o=new McpOptions{Roots=new[]{McpOptions.DefaultRoot}};}
+            Config.Reload();McpOptions o;try{o=McpOptions.Load();}catch{o=new McpOptions{Workspaces=new[]{McpOptions.DefaultWorkspace}};}
             LabelAt("LAN / 폐쇄망은 LAN IP HTTPS, 외부망은 공개 HTTPS WebMCP로 연결합니다.\r\n파일·폴더 전송은 브라우저로 사용하며 LLM PC용 연결기 설치가 필요 없습니다.",20,18,580,48);
             enabled=new CheckBox{Text="이 PC의 MCP 사용 (WebMCP 내부 연결 포함)",Checked=o.Enabled,Location=new Point(20,76),AutoSize=true};Controls.Add(enabled);
             LabelAt("MCP 포트",350,78,85,25);port=new NumericUpDown{Minimum=1,Maximum=65535,Value=o.Port,Location=new Point(440,75),Width=140};Controls.Add(port);
             LabelAt("내부 MCP 포트 접속 허용 IPv4 / 대역 (LAN WebMCP 대역은 별도 설정)",20,118,580,23);
             networks=new TextBox{Text=o.AllowedNetworks,Location=new Point(20,144),Width=580};Controls.Add(networks);
-            LabelAt("파일 작업 폴더 (한 줄에 하나, 절대 경로)",20,183,580,23);
-            roots=new TextBox{Text=string.Join("\r\n",o.Roots),Multiline=true,ScrollBars=ScrollBars.Vertical,Location=new Point(20,209),Size=new Size(580,94)};Controls.Add(roots);
+            LabelAt("기본 작업공간 (접근 제한 아님 · 첫 줄은 기본 실행 위치)",20,183,580,23);
+            workspaces=new TextBox{Text=string.Join("\r\n",o.Workspaces),Multiline=true,ScrollBars=ScrollBars.Vertical,Location=new Point(20,209),Size=new Size(580,94)};Controls.Add(workspaces);
             commands=new CheckBox{Text="프로그램·PowerShell 실행 허용",Checked=o.AllowCommands,Location=new Point(20,320),AutoSize=true};Controls.Add(commands);
             screen=new CheckBox{Text="화면 캡처 허용",Checked=o.AllowScreen,Location=new Point(355,320),AutoSize=true};Controls.Add(screen);
-            LabelAt("명령은 원격제어 실행 계정의 권한으로 실행됩니다 (서비스 모드는 SYSTEM).\r\n작업 폴더 제한은 파일 도구에 적용되며 PowerShell 명령을 제한하지 않습니다.\r\nWebMCP는 아래 웹 설정에서 개통합니다. 내부 MCP 포트는 화면 포트와 다릅니다.",20,357,580,68);
+            LabelAt("작업공간 밖의 경로도 지정할 수 있습니다. 폴더 목록은 권한 설정이 아닙니다.\r\n파일·명령은 실행 계정의 Windows 권한을 따릅니다 (서비스: SYSTEM).\r\nWebMCP는 아래 웹 설정에서 개통합니다. 내부 MCP 포트는 화면 포트와 다릅니다.",20,357,580,68);
             status=LabelAt("",20,435,580,38);RefreshStatus();timer.Interval=2000;timer.Tick+=delegate{RefreshStatus();};timer.Start();
             AddButton("연결 패키지 폴더",20,482,155,delegate{
                 string here=Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location),folder=Path.Combine(here,"plugins");
@@ -57,11 +57,11 @@ namespace RemoteControl
         private void Save()
         {
             try{
-                var o=new McpOptions{Enabled=enabled.Checked,Port=(int)port.Value,Roots=roots.Text.Split(new[]{'\r','\n'},StringSplitOptions.RemoveEmptyEntries),AllowedNetworks=networks.Text.Trim(),AllowCommands=commands.Checked,AllowScreen=screen.Checked};o.Validate();
+                var o=new McpOptions{Enabled=enabled.Checked,Port=(int)port.Value,Workspaces=workspaces.Text.Split(new[]{'\r','\n'},StringSplitOptions.RemoveEmptyEntries),AllowedNetworks=networks.Text.Trim(),AllowCommands=commands.Checked,AllowScreen=screen.Checked};o.Validate();
                 if(o.Enabled&&!Config.HasPassword)throw new ArgumentException("원격제어 기본 설정에서 로그인 비밀번호를 먼저 적용하세요.");
                 if(o.Port==Config.Port)throw new ArgumentException("MCP 포트는 화면 접속 포트와 다르게 지정하세요.");
-                foreach(string root in o.Roots){McpPath.Check(root,o);if(o.Enabled)Directory.CreateDirectory(root);}
-                Config.SetMany(new Dictionary<string,string>{{"mcp_enabled",o.Enabled?"1":"0"},{"mcp_port",o.Port.ToString()},{"mcp_roots",string.Join("|",o.Roots)},{"mcp_networks",o.AllowedNetworks},{"mcp_commands",o.AllowCommands?"1":"0"},{"mcp_screen",o.AllowScreen?"1":"0"}});
+                foreach(string root in o.Workspaces){McpPath.Check(root);if(o.Enabled)Directory.CreateDirectory(root);}
+                Config.SetMany(new Dictionary<string,string>{{"mcp_enabled",o.Enabled?"1":"0"},{"mcp_port",o.Port.ToString()},{"mcp_roots",string.Join("|",o.Workspaces)},{"mcp_networks",o.AllowedNetworks},{"mcp_commands",o.AllowCommands?"1":"0"},{"mcp_screen",o.AllowScreen?"1":"0"}});
                 status.Text="저장했습니다. 실행 중인 원격제어에 수 초 이내 반영됩니다.";
             }catch(Exception ex){MessageBox.Show(this,ex.Message,"MCP 설정",MessageBoxButtons.OK,MessageBoxIcon.Information);}
         }

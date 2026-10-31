@@ -26,6 +26,8 @@ const hash=data=>crypto.createHash('sha256').update(data).digest('hex');
  const http=new Client({name:'protocol-test',version:'1'},{capabilities:{}});clients.push(http);
  await http.connect(new StreamableHTTPClientTransport(new URL(base+'/mcp'),{requestInit:{headers:{Cookie:cookie}}}));
  check((await http.listTools()).tools.some(t=>t.name==='pc_start_process'),'official SDK Streamable HTTP initialize/list');
+ const init=await (await fetch(base+'/mcp',{method:'POST',headers:{Cookie:cookie},body:JSON.stringify({jsonrpc:'2.0',id:77,method:'initialize',params:{protocolVersion:'2025-11-25',capabilities:{},clientInfo:{name:'workspace-test',version:'1'}}})})).json();
+ check(init.result.instructions.includes('not access restrictions')&&init.result.instructions.includes('NOT_FOUND'),'LAN initialize explains workspace and actual error semantics');
  await http.close();clients=clients.filter(c=>c!==http);
  const exe=process.env.RC_MCP_CLIENT_EXE||fixture;
  async function connect(){const c=new Client({name:'claude-stdio-protocol-test',version:'1'},{capabilities:{}});clients.push(c);await c.connect(new StdioClientTransport({command:exe,args:['--mcp-client'],env:{...process.env,RC_MCP_HOST:'127.0.0.1',RC_MCP_PORT:String(port),RC_MCP_USER:'fixture',RC_MCP_PASSWORD:'fixture-only'},stderr:'pipe'}));return c;}
@@ -35,32 +37,48 @@ const hash=data=>crypto.createHash('sha256').update(data).digest('hex');
  async function call(name,args={}){const value=await raw(name,args);assert(!value.isError,JSON.stringify(value));return JSON.parse(value.content[0].text);}
  async function configure(command){await new Promise(resolve=>{server.stdout.once('data',resolve);server.stdin.write(command+'\n');});}
  let st=await call('pc_get_status');check(st.hostname===os.hostname()&&st.pid===server.pid,'remote target identity verified through stdio');
+ check(st.workspace_directories.length===1&&st.workspace_directories[0]===remote&&st.default_working_directory===remote&&st.workspaces_restrict_access===false&&!('allowed_roots' in st),'status exposes workspaces without an access allowlist');
  for(let i=0;i<3;i++){await client.close();clients=clients.filter(c=>c!==client);client=await connect();await call('pc_get_status');}
  check((await call('pc_list_sessions')).sessions.length===0,'reconnects do not spawn command jobs');
- const folder=path.join(remote,'한글 폴더');await call('pc_create_directory',{path:folder});
+ const outside=path.join(work,'outside');const folder=path.join(outside,'한글 폴더');await call('pc_create_directory',{path:folder});
  const text=path.join(folder,'진단.txt');let info=await call('pc_write_file',{path:text,content:'첫째\nsecond\n'});
  let read=await call('pc_read_file',{path:text});check(read.content.includes('첫째')&&read.sha256===info.sha256,'UTF-8 file write/read and hash');
  check((await raw('pc_write_file',{path:text,content:'wrong'})).isError,'overwrite requires current SHA-256');
  await call('pc_edit_file',{path:text,old_text:'second',new_text:'수정',expected_sha256:info.sha256});
  check(fs.readFileSync(text,'utf8').includes('수정')&&fs.readdirSync(folder).some(n=>n.includes('mcp-backup')),'edit verified and original backup retained');
  check((await raw('pc_write_file',{path:path.join(folder,'empty.txt')})).isError,'missing text content rejected');
- check((await raw('pc_read_file',{path:path.join(remote,'..','escape.txt')})).isError,'file path cannot escape work root');
- const outside=path.join(work,'outside');fs.mkdirSync(outside);fs.writeFileSync(path.join(outside,'secret.txt'),'outside');fs.symlinkSync(outside,path.join(remote,'junction'),'junction');
- check((await raw('pc_read_file',{path:path.join(remote,'junction','secret.txt')})).isError,'junction cannot escape file roots');
+ check((await call('pc_list_directory',{path:outside})).entries.some(e=>e.name==='한글 폴더'),'directory listing outside configured workspace succeeds');
+ check((await call('pc_read_file',{path:text})).content.includes('수정'),'existing file outside workspace is readable');
+ const missing=await raw('pc_read_file',{path:path.join(outside,'missing.txt')});check(missing.isError&&missing.structuredContent.error_code==='NOT_FOUND','missing file is not reported as permission denial');
+ const missingDownload=await raw('pc_download_file',{remote_path:path.join(outside,'missing.txt'),local_path:path.join(work,'missing-download.txt')});check(missingDownload.isError&&missingDownload.structuredContent.error_code==='NOT_FOUND','stdio download preserves the server error without inferring workspace permissions');
+ const invalid=await raw('pc_read_file',{path:'relative.txt'});check(invalid.isError&&invalid.structuredContent.error_code==='INVALID_ARGUMENT','relative path is a format error, not permission denial');
+ fs.mkdirSync(outside,{recursive:true});fs.writeFileSync(path.join(outside,'secret.txt'),'outside');fs.symlinkSync(outside,path.join(remote,'junction'),'junction');
+ const linked=await raw('pc_read_file',{path:path.join(remote,'junction','secret.txt')});check(linked.isError&&linked.structuredContent.error_code==='INVALID_ARGUMENT','junction requires its direct destination path rather than a permission claim');
  const local=path.join(work,'compiled.bin'),dest=path.join(folder,'compiled.bin');const bytes=crypto.randomBytes(4*1024*1024);fs.writeFileSync(local,bytes);
  info=await call('pc_upload_file',{local_path:local,remote_path:dest});check(info.sha256===hash(bytes)&&fs.readFileSync(dest).equals(bytes),'4MiB streamed binary upload and SHA-256 verified');
  check((await raw('pc_upload_file',{local_path:local,remote_path:dest})).isError,'binary overwrite without hash rejected');
  await call('pc_upload_file',{local_path:local,remote_path:dest,expected_sha256:info.sha256});
  const downloaded=path.join(work,'downloaded.bin');await call('pc_download_file',{remote_path:dest,local_path:downloaded});check(fs.readFileSync(downloaded).equals(bytes),'streamed download verified');
  check((await raw('pc_download_file',{remote_path:dest,local_path:downloaded})).isError,'existing local download never overwritten');
- check((await call('pc_search_files',{path:remote,query:'진단'})).paths.includes(text),'bounded recursive file search');
- check((await raw('pc_capture_screen')).isError,'screen capability respects disabled setting');
+ check((await call('pc_search_files',{path:outside,query:'진단'})).paths.includes(text),'bounded recursive file search');
+ const disabledScreen=await raw('pc_capture_screen');check(disabledScreen.isError&&disabledScreen.structuredContent.error_code==='CAPABILITY_DISABLED','disabled screen is distinguished from filesystem permission denial');
  await configure('screen');let screen=await raw('pc_capture_screen',{max_width:640});
  check(!screen.isError&&screen.content.some(c=>c.type==='image'&&c.mimeType==='image/jpeg'&&Buffer.from(c.data,'base64').length>100),'MCP image response from synthetic capture');
  await configure('commands-off');check((await raw('pc_start_process',{command:'exit 0'})).isError,'commands disabled immediately by setting');await configure('commands-on');
  await configure('password-change');check((await call('pc_get_status')).pid===server.pid,'expired session relogs in once with Remote ID/PW');
- let job=await call('pc_start_process',{command:"Write-Output 'MCP 한글 OK'; exit 7",cwd:folder,timeout_ms:10000});
- check(!job.running&&job.exit_code===7&&job.output.includes('MCP 한글 OK'),'owned PowerShell output and exit code');
+ let job=await call('pc_start_process',{command:'(Get-Location).Path',timeout_ms:10000});
+ check(!job.running&&job.exit_code===0&&job.output.includes(remote),'omitted cwd uses the first workspace');
+ job=await call('pc_start_process',{command:"Write-Output 'MCP 한글 OK'; exit 7",cwd:folder,timeout_ms:10000});
+ check(!job.running&&job.exit_code===7&&job.output.includes('MCP 한글 OK'),'explicit cwd outside workspace executes with owned output and exit code');
+ const denied=path.join(folder,'os-denied.txt');await call('pc_write_file',{path:denied,content:'synthetic ACL fixture'});
+ const psquote=v=>"'"+v.replaceAll("'","''")+"'";
+ const aclBase="$path="+psquote(denied)+";$acl=Get-Acl -LiteralPath $path;$sid=[Security.Principal.WindowsIdentity]::GetCurrent().User;$rule=New-Object Security.AccessControl.FileSystemAccessRule($sid,[Security.AccessControl.FileSystemRights]::ReadData,[Security.AccessControl.AccessControlType]::Deny);";
+ try {
+   job=await call('pc_start_process',{command:aclBase+"[void]$acl.AddAccessRule($rule);Set-Acl -LiteralPath $path -AclObject $acl",cwd:folder,timeout_ms:10000});assert.equal(job.exit_code,0,job.output);
+   const blocked=await raw('pc_read_file',{path:denied});check(blocked.isError&&blocked.structuredContent.error_code==='ACCESS_DENIED','actual Windows ACL denial remains enforced outside workspaces');
+ } finally {
+   job=await call('pc_start_process',{command:aclBase+"$acl.RemoveAccessRuleSpecific($rule);Set-Acl -LiteralPath $path -AclObject $acl",cwd:folder,timeout_ms:10000});assert.equal(job.exit_code,0,job.output);
+ }
  job=await call('pc_start_process',{command:"Write-Output 'early output'; Start-Sleep -Seconds 120",cwd:folder,timeout_ms:2000});
  for(let i=0;i<40&&job.running&&!job.output.includes('early output');i++){await delay(200);job=await call('pc_read_process_output',{session_id:job.session_id});}
  check(job.running&&job.output.includes('early output'),'output available while command is still running');await call('pc_stop_process',{session_id:job.session_id});

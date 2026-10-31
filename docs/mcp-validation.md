@@ -1,3 +1,20 @@
+# MCP v1.9.2 검증 · 2026-10-31
+
+작업공간은 기본 위치이며 접근 허용 목록이 아닙니다. 아래 과거 v1.7.0의 폴더 이탈 차단 기록은 현재 동작에 적용되지 않습니다. 운영 서비스·설정은 변경하지 않고 Windows 격리 fixture와 가짜 로그인 정보를 사용했습니다.
+
+- 실제 배포 `dist/RemoteControl.exe --mcp-client`로 LAN/stdio 통합 42개 통과: 작업공간 밖 파일 읽기·쓰기·편집·검색, 4MiB 스트리밍 전송, 실행 파일 업로드·실행, 명시적 cwd와 첫 작업공간의 기본 cwd.
+- 상태의 `workspace_directories`·`default_working_directory`·`workspaces_restrict_access:false`, LAN/웹 initialize 안내와 도구 설명.
+- 합성 파일의 실제 Windows ACL 접근 거부(`ACCESS_DENIED`), 없는 파일(`NOT_FOUND`), 상대 경로·junction(`INVALID_ARGUMENT`), 꺼진 화면 기능(`CAPABILITY_DISABLED`) 구분.
+- 세션 저장/재시작 검사 6개 통과. 웹 OAuth·LAN 다중 IP·전송/실제 HTTPS 브라우저 검사 36개 통과 (실패·건너뛰기 0).
+- 웹 전송은 작업공간 밖 파일 업로드/다운로드와 브라우저 업로드/폴더 다운로드를 검증했습니다. 덮어쓰기 해시·백업·전송 소유권·CSRF·경로 이탈 검증도 통과했습니다.
+
+- 시작 동작 회귀 검사 12개 통과. v1.9.2.0 Inno 설치 파일의 내장 리소스 해시, 실제 설치 복사 블록의 3종 런타임 import, 플러그인 배치·URL 및 설치 UI 검증 통과. 운영 설치는 수행하지 않았습니다.
+- MCP 설정 설명의 글자 영역은 Windows 기본 글꼴 기준 45px이며 지정한 68px 안에 표시됩니다.
+
+업데이트 설치 후 MCP를 다시 연결해야 새 서버 동작과 에이전트 안내가 적용됩니다. 기존 `mcp_roots` 저장 키와 설정값은 유지합니다.
+
+---
+
 # LAN MCP v1.7.0 검증 · 2026-09-29
 
 실행 중인 설치본/서비스/설정은 수정하지 않았다. 격리 fixture도 제품과 같은 Windows GUI

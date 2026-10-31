@@ -23,7 +23,7 @@ namespace RemoteControl
             if(args.Length!=1)return 64;
             string root=Path.GetFullPath(args[0]);Directory.CreateDirectory(root);
             var reserve=new TcpListener(IPAddress.Loopback,0);reserve.Start();int port=((IPEndPoint)reserve.LocalEndpoint).Port;reserve.Stop();
-            var options=new McpOptions { Enabled=true, Port=port, Roots=new[]{root}, AllowCommands=true, AllowScreen=false };
+            var options=new McpOptions { Enabled=true, Port=port, Workspaces=new[]{root}, AllowCommands=true, AllowScreen=false };
             Func<McpHost> create=delegate{return new McpHost(delegate{return options;},delegate(string user,string password){return user=="fixture"&&password=="fixture-only";},delegate(string message){Console.Error.WriteLine(message);},Path.Combine(root,"mcp-sessions.bin"));};
             McpHost host=create();
             try

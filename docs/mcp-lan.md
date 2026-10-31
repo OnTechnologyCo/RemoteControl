@@ -23,7 +23,7 @@ MCP 포트는 별개입니다. MCP 포트를 인터넷에 공개하도록 자동
 1. `RemoteControl_Setup.exe`로 설치/업데이트합니다. 빌드만으로 실행 중인 서비스가 바뀌지는 않습니다.
 2. 원격제어 창의 기본 설정에서 ID/PW를 적용합니다.
 3. 설정 영역 아래 **LLM / MCP 설정**을 열고 **LAN MCP 사용**을 켭니다.
-4. MCP 포트(예: 5901), **LLM PC의 IPv4** 또는 허용 대역, 파일 작업 폴더를 지정합니다.
+4. MCP 포트(예: 5901), **LLM PC의 IPv4** 또는 허용 대역, 기본 작업공간을 지정합니다 (접근 제한 목록이 아닙니다).
    기본 폴더는 `C:\Users\Public\Documents\RemoteControlDeploy`입니다. 명령 실행과 화면 확인도 각각 선택합니다.
    배포한 프로그램이 원격제어 제거 때 함께 지워지지 않도록 설정/설치 폴더 밖을 기본값으로 씁니다.
 5. 저장한 뒤 `MCP 대기 중 · 포트 ...` 상태를 확인합니다. 설정은 수 초 안에 반영됩니다.
@@ -33,8 +33,9 @@ MCP는 기본 꺼짐입니다. 설치 관리자의 방화벽 허용은 개인/�
 연결은 신뢰하는 LAN의 HTTP입니다. ID/PW와 데이터가 전송 구간에서 암호화되지는 않으므로
 허용 IP를 LLM PC로 좁혀 사용합니다. 기존 Remote의 로그인 실패 제한이 적용됩니다.
 
-파일 도구는 지정 폴더 밖과 junction/symlink를 거부합니다. **PowerShell은 이 폴더 제한의
-샌드박스가 아닙니다.** 명령은 원격제어의 실행 계정 권한(서비스 모드에서는 SYSTEM)으로 실행됩니다.
+**작업공간은 기본 작업 위치이며 접근 권한 설정이 아닙니다.** 첫 번째 폴더는 `cwd`를 생략했을 때 사용합니다. 파일·전송·프로그램 실행·명시적 `cwd`는 작업공간 밖의 로컬 절대 경로도 사용할 수 있으며, 실제 접근은 원격 실행 계정의 Windows 권한(서비스 모드: SYSTEM)을 따릅니다.
+
+`pc_get_status`는 `workspace_directories`, `default_working_directory`, `workspaces_restrict_access:false`를 반환합니다. 기존 `mcp_roots` 저장값은 작업공간으로 그대로 읽지만, 혼동을 일으키던 `allowed_roots` 응답 필드는 사용하지 않습니다. 작업공간 밖이라는 이유로 권한 부족을 추측하지 마세요. 실제 `ACCESS_DENIED`, 파일 없음(`NOT_FOUND`), 경로 형식 오류(`INVALID_ARGUMENT`), 꺼진 기능(`CAPABILITY_DISABLED`)을 구분합니다. 파일 도구는 junction/symlink를 따라가지 않으므로 실제 대상의 로컬 절대 경로를 지정하세요.
 
 ## 2. Claude Desktop (Windows x64)
 

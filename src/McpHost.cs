@@ -1,4 +1,4 @@
-// 전용 LAN 포트만 사용한다. 브라우저/터널 포트로 /mcp를 중계하지 않는다.
+﻿// 전용 LAN 포트만 사용한다. 브라우저/터널 포트로 /mcp를 중계하지 않는다.
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -91,7 +91,7 @@ namespace RemoteControl
             {try{tools.Transfers.SendDownload(stream,Query(target,"id"),token,options,Server.Header(lines,"Range"));}catch(Exception ex){Reply(stream,"400 Bad Request",new{error=ex.Message});}return;}
             if(path=="/download"&&method=="GET")
             {
-                try { string file=McpPath.Check(Query(target,"path"),options);Files.Send(stream,lines,file,false); }
+                try { string file=McpPath.Check(Query(target,"path"));Files.Send(stream,lines,file,false); }
                 catch(Exception ex){Reply(stream,"400 Bad Request",new{error=ex.Message});}return;
             }
             if(path!="/mcp"){Reply(stream,"404 Not Found",new{error="Not found"});return;}
@@ -110,7 +110,7 @@ namespace RemoteControl
             {
                 case "initialize":
                     string protocol=Json.Str(args,"protocolVersion");if(Array.IndexOf(new[]{"2025-11-25","2025-06-18","2025-03-26","2024-11-05"},protocol)<0)protocol="2025-11-25";
-                    response=McpJson.Result(id,new{protocolVersion=protocol,capabilities=new{tools=new{listChanged=false}},serverInfo=new{name="RemoteControl LAN",version=MainForm.Version},instructions="Use pc_get_status to verify the remote hostname before changes. File paths are on the remote PC. File and folder transfers use pc_begin_upload, pc_write_upload_chunk, pc_finish_upload, pc_prepare_download and pc_read_download_chunk with SHA-256 validation. Commands run with the remote agent's Windows rights. Keep output concise; use logs and screenshot to verify a deployment."});break;
+                    response=McpJson.Result(id,new{protocolVersion=protocol,capabilities=new{tools=new{listChanged=false}},serverInfo=new{name="RemoteControl LAN",version=MainForm.Version},instructions="Use pc_get_status to verify the remote hostname before changes. File paths are on the remote PC. Workspace directories are default working locations, not access restrictions. Any absolute local path may be used subject to the remote Windows account permissions and path validation. Never infer permission denial from a path being outside a workspace; check the actual tool response. NOT_FOUND and INVALID_ARGUMENT do not mean ACCESS_DENIED. File and folder transfers use pc_begin_upload, pc_write_upload_chunk, pc_finish_upload, pc_prepare_download and pc_read_download_chunk with SHA-256 validation. Commands run with the remote agent's Windows rights. Keep output concise; use logs and screenshot to verify a deployment."});break;
                 case "ping":response=McpJson.Result(id,new{});break;
                 case "tools/list":response=McpJson.Result(id,new{tools=McpTools.List()});break;
                 case "resources/list":response=McpJson.Result(id,new{resources=new object[0]});break;
@@ -119,7 +119,7 @@ namespace RemoteControl
                 case "tools/call":
                     string name=Json.Str(args,"name");var clock=System.Diagnostics.Stopwatch.StartNew();bool success=false;
                     try {response=McpJson.Result(id,tools.Call(name,McpJson.Obj(args,"arguments"),options,authenticated.User,authenticated.Token));success=true;}
-                    catch(Exception ex){response=McpJson.Result(id,McpJson.ToolError(ex.Message));}
+                    catch(Exception ex){response=McpJson.Result(id,McpJson.ToolError(ex));}
                     log("MCP "+McpJson.Write(new{tool=name,user=authenticated.User,ip=ip,ok=success,ms=clock.ElapsedMilliseconds}));break;
                 default:response=McpJson.Error(id,-32601,"Method not found");break;
             }
@@ -130,7 +130,7 @@ namespace RemoteControl
             string temp=null;
             try {
                 if(length>4L*1024*1024*1024)throw new IOException("업로드는 4GiB까지입니다.");
-                string path=McpPath.Check(Query(target,"path"),options),expected=Query(target,"expected_sha256"),sha=Query(target,"sha256");
+                string path=McpPath.Check(Query(target,"path")),expected=Query(target,"expected_sha256"),sha=Query(target,"sha256");
                 if(!System.Text.RegularExpressions.Regex.IsMatch(sha,"^[a-fA-F0-9]{64}$"))throw new ArgumentException("업로드 SHA-256이 필요합니다.");
                 McpTools.CheckHash(path,expected);temp=path+".mcp-upload-"+Guid.NewGuid().ToString("N")+".tmp";
                 using(var file=new FileStream(temp,FileMode.CreateNew,FileAccess.Write,FileShare.None,256*1024))

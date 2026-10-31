@@ -1,4 +1,4 @@
-// 웹/로컬 MCP가 같은 전송 경로를 쓴다. 완성되지 않은 데이터는 대상 이름으로 노출하지 않는다.
+﻿// 웹/로컬 MCP가 같은 전송 경로를 쓴다. 완성되지 않은 데이터는 대상 이름으로 노출하지 않는다.
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -53,7 +53,7 @@ namespace RemoteControl
             }
             if(row.Id!=id||row.Owner!=Owner(token))throw new UnauthorizedAccessException("다른 연결의 전송입니다.");
             if(row.Expires<DateTime.UtcNow.Ticks)throw new IOException("전송이 만료됐습니다. 다시 요청하세요.");
-            McpPath.Check(row.Path,options);McpPath.Check(row.Stage,options);
+            McpPath.Check(row.Path);McpPath.Check(row.Stage);
             string suffix=row.Kind=="folder-upload"?".dir":row.Kind=="folder-download"?".zip":".tmp";
             if(row.Stage!=row.Path+".mcp-transfer-"+row.Id+suffix)throw new IOException("전송 임시 경로가 올바르지 않습니다.");
             return row;
@@ -67,7 +67,7 @@ namespace RemoteControl
             return value;
         }
         private static string ItemPath(State row,Item item,McpOptions options)
-        {return McpPath.Check(row.Kind=="file-upload"?row.Stage:System.IO.Path.Combine(row.Stage,item.Path.Replace('/','\\')),options);}
+        {return McpPath.Check(row.Kind=="file-upload"?row.Stage:System.IO.Path.Combine(row.Stage,item.Path.Replace('/','\\')));}
         private static Item FindItem(State row,string relative)
         {relative=Relative(relative);foreach(var item in row.Files)if(item.Path==relative&&!item.Directory)return item;throw new IOException("목록에 없는 파일입니다.");}
         private static object View(State row,McpOptions options)
@@ -93,7 +93,7 @@ namespace RemoteControl
         }
         private object Begin(Dictionary<string,object> a,McpOptions options,string token)
         {
-            string path=McpPath.Check(McpTools.Required(a,"path"),options),kind=McpTools.Required(a,"kind");
+            string path=McpPath.Check(McpTools.Required(a,"path")),kind=McpTools.Required(a,"kind");
             if(kind!="file"&&kind!="folder")throw new ArgumentException("kind는 file 또는 folder입니다.");
             string id=Json.Str(a,"request_id");if(string.IsNullOrEmpty(id))id=Guid.NewGuid().ToString("N");Metadata(id);
             var items=new List<Item>();object values;if(!a.TryGetValue("files",out values)||!(values is IEnumerable))throw new ArgumentException("파일 목록과 SHA-256이 필요합니다.");
@@ -111,14 +111,14 @@ namespace RemoteControl
             if(kind=="file"&&items.Count!=1)throw new ArgumentException("전송할 파일 목록이 필요합니다.");
             string expected=Json.Str(a,"expected_sha256")??"";
             if(File.Exists(Metadata(id))) {State existing=Load(id,token,options);if(existing.Path!=path||existing.Kind!=kind+"-upload"||existing.Expected!=expected||JsonSerializer().Serialize(existing.Files)!=JsonSerializer().Serialize(items))throw new IOException("이 전송 ID의 파일 목록이 다릅니다.");return View(existing,options);}
-            Capacity();if(!Directory.Exists(System.IO.Path.GetDirectoryName(path)))throw new IOException("대상 부모 폴더가 없습니다. 먼저 작업 폴더를 만드세요.");
+            Capacity();if(!Directory.Exists(System.IO.Path.GetDirectoryName(path)))throw new IOException("대상 부모 폴더가 없습니다. 먼저 대상 부모 폴더를 만드세요.");
             if(kind=="file") {if(Directory.Exists(path))throw new IOException("대상이 폴더입니다.");McpTools.CheckHash(path,expected);}
             else if(File.Exists(path)||Directory.Exists(path))throw new IOException("폴더 업로드는 새 폴더 경로를 지정하세요. 기존 폴더를 덮어쓰지 않습니다.");
             var row=new State{Id=id,Owner=Owner(token),Kind=kind+"-upload",Path=path,Expected=expected,Status="uploading",Expires=DateTime.UtcNow.AddHours(24).Ticks,Files=items,Size=total};
-            row.Stage=path+".mcp-transfer-"+id+(kind=="folder"?".dir":".tmp");McpPath.Check(row.Stage,options);
+            row.Stage=path+".mcp-transfer-"+id+(kind=="folder"?".dir":".tmp");McpPath.Check(row.Stage);
             try {
                 if(kind=="folder")Directory.CreateDirectory(row.Stage);
-                foreach(var item in items){string p=ItemPath(row,item,options);if(item.Directory)Directory.CreateDirectory(p);else{Directory.CreateDirectory(System.IO.Path.GetDirectoryName(p));McpPath.Check(p,options);using(var f=new FileStream(p,FileMode.CreateNew,FileAccess.Write)) {}}}
+                foreach(var item in items){string p=ItemPath(row,item,options);if(item.Directory)Directory.CreateDirectory(p);else{Directory.CreateDirectory(System.IO.Path.GetDirectoryName(p));McpPath.Check(p);using(var f=new FileStream(p,FileMode.CreateNew,FileAccess.Write)) {}}}
                 Save(row);active[id]=row;return View(row,options);
             }catch{Cleanup(row,options);throw;}
         }
@@ -149,34 +149,34 @@ namespace RemoteControl
             if(row.Status!="uploading")throw new IOException("업로드 중인 전송이 아닙니다.");
             foreach(var item in row.Files)if(!item.Directory){string p=ItemPath(row,item,options);if(new FileInfo(p).Length!=item.Size||!string.Equals(McpTools.FileHash(p),item.Sha256,StringComparison.OrdinalIgnoreCase))throw new IOException("완성 파일 크기·SHA-256이 다릅니다: "+item.Path);}
             if(row.Kind=="file-upload")McpTools.Commit(row.Stage,row.Path,row.Expected,options);
-            else lock(McpTools.FileGate){McpPath.Check(row.Path,options);if(Directory.Exists(row.Path)||File.Exists(row.Path))throw new IOException("대상 폴더가 이미 생겼습니다.");Directory.Move(row.Stage,row.Path);}
+            else lock(McpTools.FileGate){McpPath.Check(row.Path);if(Directory.Exists(row.Path)||File.Exists(row.Path))throw new IOException("대상 폴더가 이미 생겼습니다.");Directory.Move(row.Stage,row.Path);}
             row.Status="completed";row.Sha256=row.Kind=="file-upload"?row.Files[0].Sha256:null;Save(row);return View(row,options);
         }
         private object Prepare(Dictionary<string,object> a,McpOptions options,string token)
         {
-            string path=McpPath.Check(McpTools.Required(a,"path"),options),kind=McpTools.Required(a,"kind");Capacity();
+            string path=McpPath.Check(McpTools.Required(a,"path")),kind=McpTools.Required(a,"kind");Capacity();
             if(kind!="file"&&kind!="folder")throw new ArgumentException("kind는 file 또는 folder입니다.");
             var row=new State{Id=Guid.NewGuid().ToString("N"),Owner=Owner(token),Kind=kind+"-download",Path=path,Expires=DateTime.UtcNow.AddHours(1).Ticks,Status="preparing"};
-            row.Stage=path+".mcp-transfer-"+row.Id+(kind=="folder"?".zip":".tmp");McpPath.Check(row.Stage,options);
+            row.Stage=path+".mcp-transfer-"+row.Id+(kind=="folder"?".zip":".tmp");McpPath.Check(row.Stage);
             if(kind=="file") {if(!File.Exists(path))throw new IOException("파일이 없습니다.");if(new FileInfo(path).Length>4L*1024*1024*1024)throw new IOException("파일 다운로드는 4GiB까지입니다.");Save(row);active[row.Id]=row;ThreadPool.QueueUserWorkItem(delegate{try{SetReadyFile(row,options);}catch(Exception ex){lock(gate){if(row.Status!="canceled"){row.Status="failed";row.Error=ex.Message;}Save(row);}}});}
             else {if(!Directory.Exists(path)||path==System.IO.Path.GetPathRoot(path))throw new IOException("받을 폴더 경로를 확인하세요.");Save(row);active[row.Id]=row;ThreadPool.QueueUserWorkItem(delegate{BuildZip(row,options);});}
             return View(row,options);
         }
         private void SetReadyFile(State row,McpOptions options)
-        { string path=McpPath.Check(row.Path,options);var result=new State();SetReady(result,path);lock(gate){if(row.Status=="canceled")return;row.Sha256=result.Sha256;row.Size=result.Size;row.Modified=result.Modified;row.Status="ready";Save(row);} }
+        { string path=McpPath.Check(row.Path);var result=new State();SetReady(result,path);lock(gate){if(row.Status=="canceled")return;row.Sha256=result.Sha256;row.Size=result.Size;row.Modified=result.Modified;row.Status="ready";Save(row);} }
         private static void SetReady(State row,string path)
         {using(var file=new FileStream(path,FileMode.Open,FileAccess.Read,FileShare.Read)){using(var sha=SHA256.Create())row.Sha256=BitConverter.ToString(sha.ComputeHash(file)).Replace("-","").ToLowerInvariant();row.Size=file.Length;row.Modified=File.GetLastWriteTimeUtc(path).Ticks;}row.Status="ready";}
         private void BuildZip(State row,McpOptions options)
         {
             try {
                 var queue=new Queue<string>();queue.Enqueue(row.Path);var entries=new List<string>();long total=0;
-                while(queue.Count>0){string dir=queue.Dequeue();McpPath.Check(dir,options);foreach(string path in Directory.GetFileSystemEntries(dir)){McpPath.Check(path,options);if(++total>10000)throw new IOException("폴더에 항목이 10000개를 넘습니다.");entries.Add(path);if(Directory.Exists(path))queue.Enqueue(path);}}
+                while(queue.Count>0){string dir=queue.Dequeue();McpPath.Check(dir);foreach(string path in Directory.GetFileSystemEntries(dir)){McpPath.Check(path);if(++total>10000)throw new IOException("폴더에 항목이 10000개를 넘습니다.");entries.Add(path);if(Directory.Exists(path))queue.Enqueue(path);}}
                 long bytes=0;
                 using(var file=new FileStream(row.Stage,FileMode.CreateNew,FileAccess.Write,FileShare.None))
                 using(var zip=new ZipArchive(file,ZipArchiveMode.Create))foreach(string path in entries)
                 {
                     lock(gate){if(row.Status=="canceled")throw new OperationCanceledException();}
-                    McpPath.Check(path,options);string relative=path.Substring(row.Path.Length+1).Replace('\\','/');
+                    McpPath.Check(path);string relative=path.Substring(row.Path.Length+1).Replace('\\','/');
                     if(Directory.Exists(path)){zip.CreateEntry(relative+"/");continue;}
                     using(var input=new FileStream(path,FileMode.Open,FileAccess.Read,FileShare.Read)) {bytes+=input.Length;if(bytes>8L*1024*1024*1024)throw new IOException("폴더 다운로드는 8GiB까지입니다.");var entry=zip.CreateEntry(relative,CompressionLevel.NoCompression);using(var output=entry.Open())input.CopyTo(output,ChunkSize);}
                 }
@@ -186,7 +186,7 @@ namespace RemoteControl
         private static string DownloadPath(State row,McpOptions options)
         {
             if(row.Status!="ready"||!row.Kind.EndsWith("-download"))throw new IOException("다운로드 준비가 완료되지 않았습니다.");
-            string path=McpPath.Check(row.Kind=="folder-download"?row.Stage:row.Path,options);var info=new FileInfo(path);
+            string path=McpPath.Check(row.Kind=="folder-download"?row.Stage:row.Path);var info=new FileInfo(path);
             if(info.Length!=row.Size||info.LastWriteTimeUtc.Ticks!=row.Modified)throw new IOException("다운로드 원본이 변경됐습니다. 다시 요청하세요.");return path;
         }
         private static object Read(State row,Dictionary<string,object> a,McpOptions options)
@@ -210,6 +210,6 @@ namespace RemoteControl
             }
         }
         private static void Cleanup(State row,McpOptions options)
-        {try{McpPath.Check(row.Stage,options);if(File.Exists(row.Stage))File.Delete(row.Stage);if(Directory.Exists(row.Stage))Directory.Delete(row.Stage,true);}catch{}}
+        {try{McpPath.Check(row.Stage);if(File.Exists(row.Stage))File.Delete(row.Stage);if(Directory.Exists(row.Stage))Directory.Delete(row.Stage,true);}catch{}}
     }
 }
