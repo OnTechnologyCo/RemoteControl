@@ -66,8 +66,13 @@ namespace RemoteControl
         }
         internal static string CurrentAddresses()
         {
+            return CurrentAddressesWithScreen(null);
+        }
+        internal static string CurrentAddressesWithScreen(string overrideScreenUrl)
+        {
             Config.Reload();var state=Agent.ReadStatus();
             string screen=state!=null?state.Url:RemoteTunnel.CurrentUrl;
+            if(overrideScreenUrl!=null)screen=overrideScreenUrl;
             string mcp=state!=null?state.McpWebUrl:(Config.Get("mcp_web_mode")=="private"?PrivateMcp.CurrentUrl:TailscaleMcp.CurrentUrl);
             bool verified=state!=null?state.McpWebReady:(Config.Get("mcp_web_mode")=="private"?PrivateMcp.Ready:TailscaleMcp.Ready);
             if(Config.Get("mcp_web_mode")!="tailscale"&&Config.Get("mcp_web_mode")!="private"){mcp=Config.Get("mcp_web_url");verified=false;}

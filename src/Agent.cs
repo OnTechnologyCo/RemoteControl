@@ -67,6 +67,10 @@ namespace RemoteControl
                 delegate { return Config.HasPassword && server.Port != 0 && Config.Get("extauto") == "1"; },
                 delegate (string s) { SvcLog.Write(s); });
 
+            // PC 부팅 후 첫 텔레그램 상태 알림. 터널 준비 전에는 대기하며
+            // 동일 부팅에서 서비스가 재시작해도 중복 전송하지 않는다.
+            StartupNotify.Start();
+
             // 상태를 남기고, 창에서 바꾼 설정을 따라간다.
             string pw = Config.Get("pwhash");
 

@@ -297,6 +297,10 @@ namespace RemoteControl
 
             if (RemoteTunnel.Provider == "tailscale") Pin(url);
 
+            // 부팅 후 첫 연결 알림에는 현주소와 터널 정보를 포함한다.
+            // 성공한 경우 별도의 주소 변경 알림을 중복해서 보내지 않는다.
+            if (StartupNotify.OnVerifiedTunnel(url)) return;
+
             // 비교 기준은 프로세스 메모리가 아니라 설정 파일이다.
             // 메모리에만 두면 제일 중요한 경우를 놓친다 - PC 를 껐다 켜는 사이에 주소가
             // 바뀌는 것. 다시 뜬 직후에는 "이전 주소" 가 비어 있어 바뀐 줄을 모른다.

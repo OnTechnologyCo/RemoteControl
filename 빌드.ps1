@@ -56,6 +56,7 @@ $args = @(
     "/r:System.Core.dll"
     "/r:System.Drawing.dll"
     "/r:System.Windows.Forms.dll"
+    "/r:System.Management.dll"
     "/r:System.ServiceProcess.dll"
     "/r:System.Security.dll"
     "/r:System.Web.Extensions.dll"

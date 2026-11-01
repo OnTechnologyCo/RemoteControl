@@ -1,3 +1,10 @@
+## PC 부팅 첫 텔레그램 접속 알림 (v1.9.4)
+
+- `StartupNotify`는 SYSTEM 대리 프로세스에서 시작한다. `TunnelGuard.Healthy()`의 외부 공개 주소 왕복 검증 후 현재 화면/MCP 주소와 PC·원격계정·SSHTunnel 정보를 전송하며, 부팅 때 주소가 바뀌었으면 이전 주소를 함께 표시한다.
+- `Win32_OperatingSystem.LastBootUpTime` 기반 부팅 ID와 chat ID를 `tg_boot_notice`에 보존한다. 서비스/에이전트/터널 재시작 알림 중복을 방지하고 다른 수신자 설정을 구별한다. 부팅 알림 성공 시 별도의 주소 변경 메시지를 중복 전송하지 않는다.
+- 120초 내 접속 검증이 없으면 미확인 주소를 성공으로 주장하지 않고 대기 메시지를 보낸다. 나중에 공개 주소가 검증되면 완료 메시지를 보낸다. 실패한 전송은 완료로 기록하지 않는다.
+- 토큰·비밀번호·SSH 인증키를 전송하거나 로그에 남기지 않는다. Windows 트레이 시작 알림을 다시 켜지 않는다. 실제 Telegram을 호출하지 않는 `bench/Test-StartupNotify.ps1` 및 기존 `bench/Test-NotifyMessages.ps1`를 유지한다.
+
 ## 업데이트 설치 파일 잠금 (v1.9.3)
 
 - 이전 EXE의 텔레그램 상수 메타데이터는 `ReflectionOnlyLoad(File.ReadAllBytes(...))`로 읽는다. `ReflectionOnlyLoadFrom`은 설치 엔진 안에서 파일 잠금을 유지해 후속 EXE 교체를 실패시키므로 복원하지 않는다.

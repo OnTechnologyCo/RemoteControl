@@ -82,7 +82,7 @@ namespace RemoteControlSetup
 
         internal const string Product = "원격제어";
 
-        internal const string Version = "1.9.3";
+        internal const string Version = "1.9.4";
 
         internal const string ExeName = "RemoteControl.exe";
 
