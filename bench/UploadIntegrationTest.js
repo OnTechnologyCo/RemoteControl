@@ -6,7 +6,7 @@ const destination=path.join(fixture,'received'), source=path.join(fixture,'sourc
 fs.mkdirSync(destination);fs.mkdirSync(source);
 let backend,edge,server,cdp,passed=0;
 function check(ok,label) { if(!ok)throw Error(label);console.log('PASS '+(++passed)+' '+label); }
-async function poll(test) { for(let n=0;n<150;n++){if(await test())return;await new Promise(r=>setTimeout(r,100));}throw Error('fixture wait timeout'); }
+async function poll(test, limit=150) { for(let n=0;n<limit;n++){if(await test())return;await new Promise(r=>setTimeout(r,100));}throw Error('fixture wait timeout'); }
 async function run() {
   backend=spawn(path.join(root,'artifacts/upload-test/UploadFixture.exe'),[path.join(root,'dist/RemoteControl.exe'),fixture],{windowsHide:true,stdio:['ignore','pipe','pipe']});
   backend.stderr.on('data',data=>process.stderr.write(data));
@@ -32,13 +32,21 @@ async function run() {
   await poll(()=>fs.existsSync(path.join(destination,'incomplete.bin.올리는중')));partial.destroy();
   await poll(()=>!fs.existsSync(path.join(destination,'incomplete.bin.올리는중')));
   check(!fs.existsSync(path.join(destination,'incomplete.bin')),'interrupted HTTP upload removes partial file');
+  let dropOneChunkAck=false, droppedChunkAck=false;
   server=http.createServer((request,response)=>{
     if(request.url.startsWith('/fs/')) {
-      const upstream=http.request({host:'127.0.0.1',port,path:request.url,method:request.method,headers:request.headers},reply=>{response.writeHead(reply.statusCode,reply.headers);reply.pipe(response);});
+      const upstream=http.request({host:'127.0.0.1',port,path:request.url,method:request.method,headers:request.headers},reply=>{
+        if(dropOneChunkAck && request.url.startsWith('/fs/upload/chunk?')) {
+          dropOneChunkAck=false; droppedChunkAck=true;
+          reply.resume();reply.on('end',()=>response.destroy());
+          return; // Simulate lost response AFTER server committed the chunk.
+        }
+        response.writeHead(reply.statusCode,reply.headers);reply.pipe(response);
+      });
       upstream.on('error',()=>{response.writeHead(502);response.end();});request.pipe(upstream);return;
     }
     if(request.url==='/peers'){response.setHeader('Content-Type','application/json');response.end('{"peers":[]}');return;}
-    const asset=request.url==='/viewer.js'?'viewer.js':'viewer.html';response.setHeader('Content-Type',asset.endsWith('.js')?'text/javascript':'text/html');response.end(fs.readFileSync(path.join(root,'web',asset)));
+    const asset=request.url==='/viewer.js'?'viewer.js':request.url==='/upload-chunks.js'?'upload-chunks.js':'viewer.html';response.setHeader('Content-Type',asset.endsWith('.js')?'text/javascript':'text/html');response.end(fs.readFileSync(path.join(root,'web',asset)));
   });
   server.on('upgrade',(_,socket)=>socket.destroy());server.listen(0,'127.0.0.1');await once(server,'listening');
   const profile=path.join(fixture,'edge');
@@ -72,6 +80,26 @@ async function run() {
   await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
   check(await evaluate('document.querySelector("#files .card").getBoundingClientRect().right <= innerWidth && document.querySelector("#files .hd").scrollWidth <= document.querySelector("#files .hd").clientWidth'),'upload controls fit a 390px mobile viewport');
   const shot=await send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(fixture,'upload-mobile.png'),Buffer.from(shot.data,'base64'));
+  // 130MiB real Edge file-picker upload through the proxy and HTTP fixture.
+  // Every request must be <=2MiB multipart, not a monolithic >100MB POST.
+  const big=path.join(source,'대용량-130MiB.bin'), bigDest=path.join(destination,path.basename(big));
+  const piece=crypto.randomBytes(2*1024*1024), expected=crypto.createHash('sha256');
+  const fd=fs.openSync(big,'w');
+  try { for(let i=0;i<65;i++){fs.writeSync(fd,piece);expected.update(piece);} } finally {fs.closeSync(fd);}
+  dropOneChunkAck=true;
+  const began=Date.now();
+  await pick('#fsPick',[big]);
+  await poll(()=>evaluate('uploadJob !== null'),100);
+  await poll(()=>evaluate('uploadJob === null'),1800);
+  const err=await evaluate('document.getElementById("fsUploadErrorList").textContent');
+  check(fs.existsSync(bigDest) && fs.statSync(bigDest).size===130*1024*1024,'Edge uploads a 130MiB file through 2MiB requests: '+err);
+  const actual=crypto.createHash('sha256');
+  await new Promise((resolve,reject)=>{const s=fs.createReadStream(bigDest);s.on('data',part=>actual.update(part));s.on('end',resolve);s.on('error',reject);});
+  check(actual.digest('hex')===expected.digest('hex'),'130MiB upload passes end-to-end SHA256 validation');
+  check(droppedChunkAck,'Lost chunk acknowledgement exercised automatic server-offset reconciliation');
+  check(!(await evaluate('Object.keys(localStorage).some(k=>k.startsWith("rc-chunk-v2:"))')),'Completed large upload clears stored resume ID');
+  console.log('MEASURE Edge 130MiB loopback upload '+(Date.now()-began)+' ms');
+  fs.unlinkSync(big);fs.unlinkSync(bigDest);
   console.log('Upload integration: '+passed+' passed');console.log('Fixture: '+fixture);
 }
 run().catch(error=>{console.error(error);process.exitCode=1;}).finally(()=>{if(cdp)cdp.close();if(edge)edge.kill();if(backend)backend.kill();if(server){server.closeAllConnections();server.close();}});

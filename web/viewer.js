@@ -1664,6 +1664,7 @@ function cancelUpload() {
   if (!job) return;
   job.canceled = true;
   var xhr = job.xhr;
+  if (job.chunkUpload && typeof cancelChunkUpload === "function") cancelChunkUpload(job);
   finishUpload(job, true);
   if (xhr) xhr.abort();
 }
@@ -1782,6 +1783,17 @@ function uploadNext(job) {
   if (job.blocked.some(function (path) { return task.path.toLowerCase().indexOf(path + '/') === 0; })) {
     uploadError(job, task.path, '상위 폴더를 만들지 못했습니다.');
     setTimeout(function () { uploadNext(job); }, 0); return;
+  }
+  if (!task.dir && task.file.size > 8 * 1024 * 1024) {
+    // Never send a whole large file in one HTTP request: Cloudflare and similar
+    // reverse proxies can reject requests larger than 100 MB with HTTP 413.
+    if (typeof uploadChunked !== "function") {
+      uploadError(job, task.path, "분할 업로드 모듈이 로드되지 않았습니다. 새로고침 후 다시 시도해 주세요.");
+      finishUpload(job, true);
+      return;
+    }
+    uploadChunked(job, task);
+    return;
   }
   uploadStatus('파일 ' + job.done + '/' + job.files + '개 · ' + bytes(job.sent) + '/' + bytes(job.total) + ' · ' + task.path);
   var xhr = new XMLHttpRequest(); job.xhr = xhr;

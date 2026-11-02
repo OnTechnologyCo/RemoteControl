@@ -699,7 +699,7 @@ namespace RemoteControl
         /// 이걸 안 하면 이름에 "..\..\Windows\System32\..." 를 넣어 아무 데나 쓸 수 있다.
         /// 대리 프로세스는 SYSTEM 으로 돌기 때문에 실제로 써진다.
         /// </summary>
-        private static string SafeName(string name)
+        internal static string SafeName(string name)
         {
             if (string.IsNullOrEmpty(name)) return "";
 
@@ -715,7 +715,7 @@ namespace RemoteControl
             return s.Length > 200 ? s.Substring(0, 200) : s;
         }
 
-        private static string Unique(string target)
+        internal static string Unique(string target)
         {
             if (!File.Exists(target) && !Directory.Exists(target)) return target;
 

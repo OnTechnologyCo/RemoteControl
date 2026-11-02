@@ -231,6 +231,11 @@ namespace RemoteControl
                         Send(stream, "200 OK", "application/javascript; charset=utf-8",
                              Encoding.UTF8.GetBytes(Res("jpeg-worker.js")), "Cache-Control: no-store\r\n");
                         return;
+                    case "/upload-chunks.js":
+                        Send(stream, "200 OK", "application/javascript; charset=utf-8",
+                             Encoding.UTF8.GetBytes(Res("upload-chunks.js")), "Cache-Control: no-store\r\n");
+                        return;
+
                     case "/viewer.js":
                         Send(stream, "200 OK", "application/javascript; charset=utf-8",
                              Encoding.UTF8.GetBytes(Res("viewer.js")), "Cache-Control: no-store\r\n");
@@ -247,6 +252,11 @@ namespace RemoteControl
                     case "/fs/tar":
                     case "/fs/pack":
                     case "/fs/put":
+                    case "/fs/upload/start":
+                    case "/fs/upload/status":
+                    case "/fs/upload/chunk":
+                    case "/fs/upload/finish":
+                    case "/fs/upload/cancel":
                     case "/fs/mkdir":
                     {
                         int pc = QInt(query, "pc", 0);
@@ -381,6 +391,51 @@ namespace RemoteControl
 
             switch (path)
             {
+                case "/fs/upload/start":
+                case "/fs/upload/status":
+                case "/fs/upload/chunk":
+                case "/fs/upload/finish":
+                case "/fs/upload/cancel":
+                {
+                    // Chunk uploads are authenticated and require a custom XHR header.
+                    // HTML forms cannot forge it; cross-origin fetch requires preflight.
+                    if (Header(lines, "X-RC-Upload") != "1")
+                    {
+                        Send(stream, "403 Forbidden", "application/json; charset=utf-8",
+                             Encoding.UTF8.GetBytes("{\"ok\":false,\"err\":\"인증된 업로드 요청이 아닙니다.\"}"), "Cache-Control: no-store\r\n");
+                        return;
+                    }
+                    bool status = path == "/fs/upload/status";
+                    if (method != (status ? "GET" : "POST"))
+                    {
+                        Send(stream, "405 Method Not Allowed", "application/json; charset=utf-8",
+                             Encoding.UTF8.GetBytes("{\"ok\":false,\"err\":\"지원하지 않는 업로드 방식입니다.\"}"), "Cache-Control: no-store\r\n");
+                        return;
+                    }
+                    string id = QStr(query, "id");
+                    string json;
+                    if (path == "/fs/upload/start")
+                    {
+                        long size;
+                        if (!long.TryParse(QStr(query, "size"), out size)) size = -1;
+                        json = FileChunkUpload.Begin(sess.Token, p, QStr(query, "r"), QStr(query, "n"), size, id);
+                    }
+                    else if (status) json = FileChunkUpload.Status(sess.Token, id);
+                    else if (path == "/fs/upload/finish") json = FileChunkUpload.Finish(sess.Token, id);
+                    else if (path == "/fs/upload/cancel") json = FileChunkUpload.Cancel(sess.Token, id);
+                    else
+                    {
+                        long len, offset;
+                        if (!long.TryParse(Header(lines, "Content-Length"), out len)) len = -1;
+                        if (!long.TryParse(QStr(query, "offset"), out offset)) offset = -1;
+                        stream.ReadTimeout = 120000; // per-read inactivity, not whole-file timeout
+                        json = FileChunkUpload.Chunk(sess.Token, id, offset, stream, preRead, len,
+                            Files.Boundary(Header(lines, "Content-Type")), QStr(query, "sha256"));
+                    }
+                    Send(stream, "200 OK", "application/json; charset=utf-8",
+                         Encoding.UTF8.GetBytes(json), "Cache-Control: no-store\r\n");
+                    return;
+                }
                 case "/fs/list":
                     Send(stream, "200 OK", "application/json; charset=utf-8",
                          Encoding.UTF8.GetBytes(Files.List(p)), "Cache-Control: no-store\r\n");
@@ -473,8 +528,9 @@ namespace RemoteControl
                     long len = 0;
                     long.TryParse(Header(lines, "Content-Length") ?? "0", out len);
 
-                    // 올리는 데도 오래 걸린다. 읽기 제한을 풀어 준다.
-                    stream.ReadTimeout = 15000; // ping/ACK도 끊겼으면 눌린 입력을 무한히 남기지 않는다.
+                    // 구형 단일 POST 업로드도 느린 회선에서 데이터가 잠깐 멎어도 유지한다.
+                    // 새 웹 뷰어는 2MiB 조각을 사용해 프록시의 본문 크기 제한도 피한다.
+                    stream.ReadTimeout = 120000;
 
                     string name = QStr(query, "n");
 
@@ -548,14 +604,14 @@ namespace RemoteControl
             long len = 0;
             long.TryParse(Header(lines, "Content-Length") ?? "0", out len);
 
-            // 파일이 오가는 동안은 제한을 풀어 둔다. 몇 분씩 걸린다.
-            stream.ReadTimeout = 15000; // ping/ACK도 끊겼으면 눌린 입력을 무한히 남기지 않는다.
+            // 하위 PC에서도 청크 수신이 일시 지연될 수 있으므로 읽기 유휴 제한을 연장한다.
+            stream.ReadTimeout = 120000;
             stream.WriteTimeout = Timeout.Infinite;
 
             string why;
             if (!Bridge.Http(stream, peer, method, path, StripPc(query),
                              Header(lines, "Range"), Header(lines, "Content-Type"),
-                             len, preRead, ip, out why))
+                             Header(lines, "X-RC-Upload"), len, preRead, ip, out why))
             {
                 Send(stream, "502 Bad Gateway", "application/json; charset=utf-8",
                      Encoding.UTF8.GetBytes("{\"err\":\"" + Json.Escape(why) + "\"}"), "");

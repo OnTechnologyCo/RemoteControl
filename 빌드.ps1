@@ -23,6 +23,7 @@ $srcs = Get-ChildItem (Join-Path $root "src") -Filter *.cs | ForEach-Object { $_
 $res = @(
     "web\viewer.html,viewer.html"
     "web\viewer.js,viewer.js"
+    "web\upload-chunks.js,upload-chunks.js"
     "web\media.js,media.js"
     "web\jpeg-worker.js,jpeg-worker.js"
     "video-helper.exe.gz,video-helper.exe.gz"

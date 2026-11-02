@@ -431,7 +431,7 @@ namespace RemoteControl
         /// 경우에 하위 PC 의 잠금이 걸릴 때까지 두들기게 된다.
         /// </summary>
         internal static bool Http(NetworkStream browser, Peer p, string method, string path,
-                                  string query, string range, string contentType, long bodyLen,
+                                  string query, string range, string contentType, string uploadMarker, long bodyLen,
                                   byte[] preRead, string userIp, out string why)
         {
             why = "";
@@ -449,7 +449,7 @@ namespace RemoteControl
             }
 
             bool retry;
-            bool ok = HttpOnce(browser, p, method, path, query, range, contentType, bodyLen,
+            bool ok = HttpOnce(browser, p, method, path, query, range, contentType, uploadMarker, bodyLen,
                                preRead, userIp, token, out retry, out why);
 
             if (ok || !retry || fresh) return ok;
@@ -465,12 +465,12 @@ namespace RemoteControl
             Remember(p, token);
 
             bool dummy;
-            return HttpOnce(browser, p, method, path, query, range, contentType, bodyLen,
+            return HttpOnce(browser, p, method, path, query, range, contentType, uploadMarker, bodyLen,
                             preRead, userIp, token, out dummy, out why);
         }
 
         private static bool HttpOnce(NetworkStream browser, Peer p, string method, string path,
-                                     string query, string range, string contentType, long bodyLen,
+                                     string query, string range, string contentType, string uploadMarker, long bodyLen,
                                      byte[] preRead, string userIp, string token, out bool retry, out string why)
         {
             retry = false;
@@ -508,6 +508,7 @@ namespace RemoteControl
                     if (!string.IsNullOrEmpty(contentType))
                         req.Append("Content-Type: ").Append(contentType.Replace("\r", "").Replace("\n", "")).Append("\r\n");
 
+                    if (uploadMarker == "1") req.Append("X-RC-Upload: 1\r\n");
                     if (bodyLen > 0) req.Append("Content-Length: ").Append(bodyLen).Append("\r\n");
 
                     req.Append("Connection: close\r\n\r\n");
@@ -532,7 +533,11 @@ namespace RemoteControl
                         while (left > 0)
                         {
                             int n = browser.Read(buf, 0, (int)Math.Min(buf.Length, left));
-                            if (n <= 0) break;
+                            if (n <= 0)
+                            {
+                                why = "파일 업로드 도중 원본 연결이 끊겼습니다.";
+                                return false; // Do not wait on an incomplete downstream request body.
+                            }
 
                             ds.Write(buf, 0, n);
                             left -= n;
