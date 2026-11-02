@@ -4,7 +4,7 @@
 
   "name": "remotecontrol-lan",
 
-  "version": "1.9.4",
+  "version": "1.9.5",
 
   "description": "Inspect and deploy programs on offline LAN PCs using RemoteControl login.",
 

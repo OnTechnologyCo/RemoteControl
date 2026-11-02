@@ -70,6 +70,8 @@ namespace RemoteControl
 
         internal void Stop()
         {
+            // 연결 종료/포트 변경 시 모니터가 검은 상태로 남지 않도록 복구한다.
+            PrivacyScreen.Reset();
             if (mcp != null) { mcp.Dispose(); mcp = null; }
             try
             {
@@ -716,6 +718,8 @@ namespace RemoteControl
             stream.ReadTimeout = 15000; // ping/ACK도 끊겼으면 눌린 입력을 무한히 남기지 않는다.
 
             WebSocketConn ws = new WebSocketConn(stream);
+            // 소켓별 내부 토큰: 클라이언트 JSON으로 소유자를 위조할 수 없다.
+            object privacyViewer = new object();
             Interlocked.Increment(ref Viewers);
             Notify(string.Format("화면 연결 - {0} ({1})", sess.User, ip));
 
@@ -742,6 +746,7 @@ namespace RemoteControl
             {
                 src = new ScreenSource(ScreenBounds(screenIndex));
                 SendInit(ws, src, screenIndex, output);
+                ws.SendText(PrivacyStatusJson(PrivacyScreen.IsActive, true, ""));
 
                 ScreenSource srcRef = src;
 
@@ -772,6 +777,24 @@ namespace RemoteControl
 
                     switch (t)
                     {
+                        case "privacy":
+                        {
+                            string privacyOp = Json.Str(o, "op");
+                            bool active, ok; string error;
+                            if (privacyOp == "on" || privacyOp == "off")
+                            {
+                                ok = PrivacyScreen.Set(privacyViewer, privacyOp == "on", out active, out error);
+                                if (ok) Notify("프라이버시 화면 " + (active ? "켜짐" : "해제") + " - " + sess.User + " (" + ip + ")");
+                            }
+                            else
+                            {
+                                active = PrivacyScreen.IsActive;
+                                ok = privacyOp == "status";
+                                error = ok ? "" : "지원하지 않는 화면 보호 요청입니다.";
+                            }
+                            ws.SendText(PrivacyStatusJson(active, ok, error));
+                            break;
+                        }
                         case "rtc":
                             string rtcOp = Json.Str(o, "op"), rtcData = Json.Str(o, "data") ?? "";
                             int rtcId = Json.Int(o, "id", 0), rtcView = Json.Int(o, "view", -1);
@@ -960,7 +983,8 @@ namespace RemoteControl
 
                         case "ping":
                             string pong = "{\"t\":\"pong\",\"c\":" +
-                                Json.Num(o, "c", 0).ToString("R", System.Globalization.CultureInfo.InvariantCulture) + "}";
+                                Json.Num(o, "c", 0).ToString("R", System.Globalization.CultureInfo.InvariantCulture) +
+                                ",\"privacy\":" + (PrivacyScreen.IsActive ? "true" : "false") + "}";
                             output.Post(delegate { ws.SendText(pong); });
                             break;
                     }
@@ -970,6 +994,7 @@ namespace RemoteControl
             finally
             {
                 running = false;
+                PrivacyScreen.Release(privacyViewer); // 연결이 사라지면 즉시 물리 모니터 복구
                 input.Dispose(); // 네트워크 정리를 기다리기 전에 이 접속이 누른 입력부터 해제한다.
                 ws.Abort();
                 if (sender != null) { try { sender.Join(500); } catch { } }
@@ -979,6 +1004,13 @@ namespace RemoteControl
                 Interlocked.Decrement(ref Viewers);
                 Notify(string.Format("화면 연결 종료 - {0} ({1})", sess.User, ip));
             }
+        }
+
+        private static string PrivacyStatusJson(bool active, bool ok, string reason)
+        {
+            return "{\"t\":\"privacy\",\"on\":" + (active ? "true" : "false") +
+                   ",\"ok\":" + (ok ? "true" : "false") +
+                   ",\"reason\":\"" + Json.Escape(reason ?? "") + "\"}";
         }
 
         private static Rectangle ScreenBounds(int i)

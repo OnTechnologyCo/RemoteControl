@@ -1,3 +1,10 @@
+## 웹 원격 프라이버시 화면 (v1.9.5)
+
+- 로그인된 `/ws`의 고정 `privacy` 명령만 물리 모니터 가림을 제어한다. HTTP의 비인증 가림 API는 만들지 않는다. 각 연결에 내부 토큰을 부여하고 가림을 켠 소켓이 끊기면 반드시 해제한다. 다른 인증 세션은 가림을 중지할 수 있지만 소유권을 탈취할 수 없다.
+- `PrivacyScreen.cs`의 Opaque Layered/TopMost WinForms 창에서 WDA_EXCLUDEFROMCAPTURE(Windows 10 2004 이상)를 적용하고 확인한다. 캡처 스레드는 그대로 유지하며 물리 디스플레이의 전원을 끄지 않는다. PC의 기본 데스크톱(Default)에서만 시작한다.
+- 실패 시 가림 성공을 주장하지 않으며 `Ctrl+Alt+Shift+F12` 긴급 복구, 세션 종료 및 서버 종료 복구, 다중 모니터 갱신을 유지한다. 트레이의 시작 알림을 재도입하지 않는다.
+- bench/Test-PrivacyScreen.ps1, Test-StreamServer.ps1, Test-Control.ps1은 가림 창을 실제로 만들지 않고 테스트한다. 실제 그래픽 드라이버/가림 화면/원격 캡처 동작은 별도 수동 검증이 필요하다. 상세: docs/privacy-screen-195.md.
+
 ## PC 부팅 첫 텔레그램 접속 알림 (v1.9.4)
 
 - `StartupNotify`는 SYSTEM 대리 프로세스에서 시작한다. `TunnelGuard.Healthy()`의 외부 공개 주소 왕복 검증 후 현재 화면/MCP 주소와 PC·원격계정·SSHTunnel 정보를 전송하며, 부팅 때 주소가 바뀌었으면 이전 주소를 함께 표시한다.

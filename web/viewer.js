@@ -220,6 +220,7 @@ function connect() {
   var gen = ++wsGen;
   resetInput(false);
   inputReady = false; firstInit = true; supportsFlow = false;
+  privacyPending = false; updatePrivacy(false);
   renderGen++; tileVersions = {}; packetJobs = []; moveSeq = 0;
   curPngReady = false; curImg.hidden = true;
   var proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
@@ -235,6 +236,7 @@ function connect() {
     if (gen !== wsGen) return;          // 우리가 갈아탄 것이다. 되살리지 않는다
 
     alive = false; inputReady = false;
+    privacyPending = false; updatePrivacy(false);
     resetInput(false); renderGen++; tileVersions = {}; packetJobs = [];
     msg('연결이 끊어졌습니다', '잠시 후 다시 연결합니다…');
     setTimeout(function () { if (gen === wsGen) connect(); }, 1500);
@@ -321,6 +323,7 @@ function onMessage(ev) {
       document.getElementById('bMon').textContent = '화면 ' + (m.screen + 1);
       if (fit) doFit(); else applyTransform();
       hideMsg();
+      syncPrivacyButton();
       if (videoTransport) videoTransport.start(m);
     }
     else if (m.t === 'rtc') { if (videoTransport) videoTransport.handle(m); }
@@ -344,6 +347,14 @@ function onMessage(ev) {
     }
     else if (m.t === 'pong') {
       document.getElementById('mLat').textContent = Math.round(performance.now() - m.c);
+      // Existing latency ping also carries privacy state: no additional poll traffic.
+      if (typeof m.privacy === 'boolean' && !privacyPending) updatePrivacy(m.privacy);
+    }
+    else if (m.t === 'privacy') {
+      privacyPending = false;
+      updatePrivacy(!!m.on);
+      if (m.ok === false) flash(m.reason || '모니터 가리기를 변경하지 못했습니다.');
+      else if (m.reason) flash(m.reason);
     }
     else if (m.t === 'fail') {
       if (videoTransport) videoTransport.stop(false);
@@ -968,6 +979,37 @@ Array.prototype.forEach.call(document.querySelectorAll('[data-tap]'), function (
 });
 
 // ---------------------------------------------------------------- 도구 막대
+
+// 검정색 가림 창은 캡처에서만 제외됩니다. 실제 디스플레이는 가려지지만
+// 원격 웹 화면과 마우스·키보드 입력은 계속 사용할 수 있어야 합니다.
+var bPrivacy = document.getElementById('bPrivacy');
+var privacyOn = false, privacyPending = false;
+function syncPrivacyButton() {
+  bPrivacy.textContent = privacyOn ? '◻ 화면 복구' : '◼ 모니터 가리기';
+  bPrivacy.classList.toggle('on', privacyOn);
+  bPrivacy.disabled = !alive || !inputReady || privacyPending;
+  bPrivacy.title = privacyOn
+    ? '원격 PC의 실제 모니터 표시를 복구합니다 (긴급 해제: Ctrl+Alt+Shift+F12)'
+    : '원격 PC의 물리 모니터만 검게 가립니다. 웹 화면은 계속 표시됩니다.';
+}
+function updatePrivacy(on) { privacyOn = !!on; syncPrivacyButton(); }
+bPrivacy.addEventListener('click', function () {
+  if (!alive || !inputReady || privacyPending) return;
+  if (!privacyOn && !window.confirm('원격 PC의 실제 모니터를 검게 가리겠습니까?\n웹 원격 화면은 계속 표시됩니다.\n연결 종료 시 자동 복구되며, PC 키보드 Ctrl+Alt+Shift+F12로 긴급 해제할 수 있습니다.')) return;
+  privacyPending = true; syncPrivacyButton();
+  var generation = wsGen;
+  setTimeout(function () {
+    if (!privacyPending || generation !== wsGen) return;
+    privacyPending = false; syncPrivacyButton();
+    flash('모니터 가리기 응답이 지연되고 있습니다. 실제 상태를 다시 확인합니다.');
+    send({ t: 'privacy', op: 'status' });
+  }, 12000);
+  if (!send({ t: 'privacy', op: privacyOn ? 'off' : 'on' })) {
+    privacyPending = false; syncPrivacyButton();
+    flash('연결되지 않아 모니터 가리기를 변경하지 못했습니다.');
+  }
+});
+syncPrivacyButton();
 
 document.getElementById('bFit').addEventListener('click', function () { fit = true; doFit(); });
 

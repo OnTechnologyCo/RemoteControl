@@ -51,6 +51,8 @@
          padding:7px 10px; font-size:12.5px; cursor:pointer; white-space:nowrap; }
   .btn:active { background:#334155; }
   .btn.on { background:rgba(6,182,212,.22); color:#22d3ee; border-color:rgba(6,182,212,.5); }
+#bPrivacy.on { background:#422006; color:#fbbf24; border-color:#f59e0b; }
+#bPrivacy:disabled { opacity:.5; cursor:wait; }
   .btn.danger { color:#fca5a5; border-color:rgba(248,113,113,.35); }
 
   /* 해상도는 고를 게 많아 목록이 낫다. 휴대폰에서는 자판 대신 OS 선택창이 뜬다. */
@@ -247,6 +249,7 @@
            고르는 단추를 두면 누를 때마다 헛걸음이다. -->
       <button class="btn" id="bPc" hidden>PC</button>
       <button class="btn" id="bMon">화면 1</button>
+      <button class="btn" id="bPrivacy" disabled title="원격 PC의 실제 모니터를 검게 가립니다. 원격 화면은 유지됩니다.">◼ 모니터 가리기</button>
       <button class="btn" id="bFit">맞춤</button>
       <!-- 커서 감도. 트랙패드(터치)에서만 뜻이 있다 - 마우스로 찍는 PC 에서는
            moveBy 를 아예 안 지나가서 눌러도 아무 일이 안 일어난다.

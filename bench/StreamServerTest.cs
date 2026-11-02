@@ -11,6 +11,13 @@ namespace RemoteControl
 {
     internal static class StreamServerTest
     {
+        private sealed class FakePrivacyCover : IPrivacyCover
+        {
+            private bool active;
+            public bool IsRunning { get { return active; } }
+            public bool Start(out string error) { error = ""; active = true; return true; }
+            public void Stop() { active = false; }
+        }
         private static int checks;
         private static void Check(bool ok, string label) { if (!ok) throw new Exception(label); checks++; Console.WriteLine("PASS " + label); }
         private static string Header(Stream stream) { var s = new StringBuilder(); while (!s.ToString().EndsWith("\r\n\r\n")) { int b = stream.ReadByte(); if (b < 0) break; s.Append((char)b); } return s.ToString(); }
@@ -49,6 +56,8 @@ namespace RemoteControl
         }
         public static int Main()
         {
+            // The test controls the real WebSocket handler but NEVER blacks out a monitor.
+            PrivacyScreen.CoverFactory = delegate { return new FakePrivacyCover(); };
             var listener = new TcpListener(IPAddress.Loopback, 0); listener.Start();
             var client = new TcpClient(); client.Connect(IPAddress.Loopback, ((IPEndPoint)listener.LocalEndpoint).Port);
             var accepted = listener.AcceptTcpClient(); listener.Stop();
@@ -65,6 +74,16 @@ namespace RemoteControl
                 var ws = new WebSocketConn(stream);
                 var init = Until(ws, "init"); int view = Json.Int(init, "view", 0);
                 Check(Json.Int(init, "flow", 0) == 1 && view == 1, "server advertises flow control and viewport generation");
+                Check(!Json.Bool(Until(ws, "privacy"), "on", true), "initial privacy status is off");
+                Send(stream, "{\"t\":\"privacy\",\"op\":\"on\"}");
+                var privacyOn = Until(ws, "privacy");
+                Check(Json.Bool(privacyOn, "on", false) && Json.Bool(privacyOn, "ok", false), "authenticated WebSocket enables synthetic privacy overlay");
+                Send(stream, "{\"t\":\"ping\",\"c\":126}");
+                Check(Json.Bool(Until(ws, "pong"), "privacy", false), "latency pong also reports live privacy state");
+                Send(stream, "{\"t\":\"privacy\",\"op\":\"off\"}");
+                Check(!Json.Bool(Until(ws, "privacy"), "on", true) && !PrivacyScreen.IsActive, "WebSocket toggle restores physical screen");
+                Send(stream, "{\"t\":\"privacy\",\"op\":\"on\"}");
+                Check(Json.Bool(Until(ws, "privacy"), "on", false), "privacy can be enabled again before disconnect");
                 Send(stream, "{\"t\":\"stream\",\"auto\":false,\"probe\":true}");
                 int probe = Json.Int(Until(ws, "probe"), "n", 0);
                 Check(probe > 0, "server probes base RTT before sending screen data");
@@ -89,6 +108,7 @@ namespace RemoteControl
                 Send(stream, "{\"t\":\"ack\",\"n\":" + n1 + "}"); Send(stream, "{\"t\":\"ack\",\"n\":" + n2 + "}");
                 Check(Json.Int(Until(ws, "frame"), "n", 0) > n2, "ACK resumes transmission of resized tiles");
                 client.Close(); Check(serverThread.Join(2000), "disconnect releases session and terminates both stream threads");
+                Check(!PrivacyScreen.IsActive, "WebSocket loss automatically restores physical monitor");
                 Check(!ControlTest.Events.Exists(delegate(Native.INPUT e) { return e.type == 0 && e.U.mi.dwFlags == Native.MOUSEEVENTF_RIGHTUP; }), "disconnect never appends a phantom right-up");
                 FourK();
                 Console.WriteLine("ALL " + checks + " SERVER STREAM CHECKS PASSED"); return 0;
