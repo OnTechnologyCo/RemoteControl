@@ -51,15 +51,35 @@ function chunkUploadRequest(job, task, endpoint, args, method, body, timeout, pr
   catch (e) { respond('업로드 전송 실패: ' + e.message, null, 0); }
 }
 function chunkUploadSha256(blob) {
-  // No large in-memory file hash: each 2 MiB Blob is the only input.
-  if (!window.crypto || !window.crypto.subtle)
-    return Promise.reject(new Error('이 브라우저는 분할 SHA-256을 지원하지 않습니다. HTTPS에서 다시 접속해 주세요.'));
+  // Read only the current 2 MiB chunk, never the whole file.
   return blob.arrayBuffer().then(function (buffer) {
-    return window.crypto.subtle.digest('SHA-256', buffer);
-  }).then(function (digest) {
-    return Array.prototype.map.call(new Uint8Array(digest), function (b) {
-      return ('0' + b.toString(16)).slice(-2);
-    }).join('');
+    function fallback() {
+      // Web Crypto is unavailable on ordinary HTTP origins. Reuse the file
+      // portal's SHA-256 without weakening the server's checksum validation.
+      return import('/sha256.mjs').then(function (module) {
+        var hash = new module.Sha256(), data = new Uint8Array(buffer), at = 0;
+        return new Promise(function (resolve, reject) {
+          function step() {
+            try {
+              var end = Math.min(at + 65536, data.length);
+              hash.update(data.subarray(at, end));
+              at = end;
+              if (at < data.length) setTimeout(step, 0);
+              else resolve(hash.digest());
+            } catch (error) { reject(error); }
+          }
+          step(); // Yield between 64 KiB batches so screen/control events run.
+        });
+      });
+    }
+    if (!window.crypto || !window.crypto.subtle) return fallback();
+    return Promise.resolve().then(function () {
+      return window.crypto.subtle.digest('SHA-256', buffer);
+    }).then(function (digest) {
+      return Array.prototype.map.call(new Uint8Array(digest), function (b) {
+        return ('0' + b.toString(16)).slice(-2);
+      }).join('');
+    }, fallback);
   });
 }
 function cancelChunkUpload(job) {

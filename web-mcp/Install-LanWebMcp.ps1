@@ -9,7 +9,7 @@ foreach($ipAddress in $addresses){if(-not(Get-NetIPAddress -AddressFamily IPv4 -
 $appDir=Join-Path $env:ProgramFiles 'RemoteControlLanWebMcp'
 $stateDir=Join-Path $env:ProgramData 'RemoteControlLanWebMcp'
 Assert-LanWebMcpOwnership $appDir $stateDir
-$files=@('node.exe','caddy.exe','server.mjs','gateway.mjs','auth-state.mjs','transfers.mjs','transfer-client.mjs','node_modules','package.json','package-lock.json','LanWebMcpConfig.ps1','Disable-LanWebMcp.ps1','Import-LanWebMcpCertificate.ps1','README.md','THIRD-PARTY.txt','NODE-LICENSE.txt','CADDY-LICENSE.txt')
+$files=@('node.exe','caddy.exe','server.mjs','gateway.mjs','auth-state.mjs','transfers.mjs','transfer-client.mjs','sha256.mjs','node_modules','package.json','package-lock.json','LanWebMcpConfig.ps1','Disable-LanWebMcp.ps1','Import-LanWebMcpCertificate.ps1','README.md','THIRD-PARTY.txt','NODE-LICENSE.txt','CADDY-LICENSE.txt')
 foreach($file in $files){if(-not(Test-Path -LiteralPath (Join-Path $PSScriptRoot $file))){throw "배포 파일이 없습니다: $file"}}
 $shared=Get-LanWebMcpSharedHost $HttpsPort
 $owned=Test-Path -LiteralPath (Join-Path $stateDir 'owner.json')

@@ -240,6 +240,10 @@ namespace RemoteControl
                         Send(stream, "200 OK", "application/javascript; charset=utf-8",
                              Encoding.UTF8.GetBytes(Res("jpeg-worker.js")), "Cache-Control: no-store\r\n");
                         return;
+                    case "/sha256.mjs":
+                        Send(stream, "200 OK", "application/javascript; charset=utf-8",
+                             Encoding.UTF8.GetBytes(Res("sha256.mjs")), "Cache-Control: no-store\r\n");
+                        return;
                     case "/upload-chunks.js":
                         Send(stream, "200 OK", "application/javascript; charset=utf-8",
                              Encoding.UTF8.GetBytes(Res("upload-chunks.js")), "Cache-Control: no-store\r\n");

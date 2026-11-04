@@ -1,3 +1,9 @@
+## HTTP 파일 업로드 호환 (v1.9.8)
+
+- Web Crypto가 없는 HTTP 화면에서도 web-mcp/sha256.mjs의 공용 SHA-256으로 2MiB 조각을 검증한다. 네이티브 digest 실패도 같은 계산기로 처리하며 검증을 생략하지 않는다. 64KiB마다 이벤트 처리를 양보한다.
+- 공유 모듈의 인증된 화면/파일 포털 경로와 본체 리소스·Web MCP 설치 복사 목록을 함께 유지한다. HTTP를 위해 기존 HTTPS/OAuth 정책을 완화하지 않는다.
+- Test-Upload.ps1은 실제 비보안 HTTP 브라우저에서 crypto.subtle 부재와 130MiB 업로드·응답 유실 복구를 확인한다. 상세: docs/http-upload-198.md.
+
 ## 브릿지 MCP 중계 (v1.9.7)
 
 - 외부 MCP는 메인의 HTTPS/OAuth 연결을 사용한다. 고정 POST /bridge/mcp는 기존 화면 브릿지 인증과 MCP 사용 설정을 요구하는 내부 중계 프로토콜이다. stdio/직접 LAN MCP listener는 복원하지 않는다. 브릿지 구간의 기존 HTTP는 신뢰된 LAN/VPN에서 사용한다.
@@ -26,7 +32,7 @@
 - FileChunkUpload 서버는 기존 인증 세션과 X-RC-Upload: 1 헤더를 요구하며, 업로드 ID 소유권, offset, 실제 수신 크기, 조각 SHA-256 검증 뒤에만 완료 위치를 갱신한다. 파일 최종 저장도 기존 파일을 덮어쓰지 않는다.
 - 브라우저는 서버 상태 조회를 이용해 연결 유실 후 재개하고 성공할 때만 업로드 ID를 삭제한다. 사용자 취소 시 미완료 서버 데이터를 정리하고 완료 결과는 멱등이어야 한다.
 - Bridge.Http에서 분할 업로드 헤더를 하위 PC로 전달하고 소켓 읽기 유휴 제한을 120초로 유지한다. 작업공간은 권한 제한이 아님. 상세: docs/large-upload-196.md.
-- Test-Upload.ps1 및 UploadChunkHttpTest.js에서 격리 HTTP 130MiB, 100MB 요청 프록시, 조각 무결성, 재개, 중복 전송, 취소를 확인한다. SYSTEM 계정에서는 Edge GUI 시험을 SKIP으로 표시하고 절대 통과로 보고하지 않는다.
+- Test-Upload.ps1 및 UploadChunkHttpTest.js에서 격리 HTTP 130MiB, 100MB 요청 프록시, 조각 무결성, 재개, 중복 전송, 취소를 확인한다. v1.9.8부터 Chrome 도우미로 SYSTEM에서도 실제 비보안 HTTP 브라우저 시험을 실행한다. 시험이 실행되지 않으면 통과로 보고하지 않는다.
 
 ## 웹 원격 프라이버시 화면 (v1.9.5)
 
