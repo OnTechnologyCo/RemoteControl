@@ -233,7 +233,7 @@ namespace RemoteControlSetup
             WebMcp.RunScript(Path.Combine(o.Dir,"web-mcp","Install-LanWebMcp.ps1"),Arguments(o),say);
             string[] addresses=Addresses(o.LanAddress,o.LanAdditionalAddresses), origins=new string[addresses.Length];
             for(int i=0;i<addresses.Length;i++) origins[i]=Origin(addresses[i],o.LanHttpsPort);
-            WebMcp.SaveSettings(Installer.SettingsPath,new Dictionary<string,string>{{"mcp_lan_enabled","1"},{"mcp_lan_address",o.LanAddress},
+            WebMcp.SaveSettings(Installer.SettingsPath,new Dictionary<string,string>{{"mcp_enabled","1"},{"mcp_lan_enabled","1"},{"mcp_lan_address",o.LanAddress},
                 {"mcp_lan_addresses",string.Join(",",addresses)},{"mcp_lan_https_port",o.LanHttpsPort.ToString()},{"mcp_lan_gateway",o.LanGatewayPort.ToString()},
                 {"mcp_lan_networks",o.LanNetworks},{"mcp_lan_url",Origin(o)},{"mcp_lan_urls",string.Join(",",origins)}});
         }
@@ -241,7 +241,7 @@ namespace RemoteControlSetup
         {
             Validate(o);
             if(!o.LanWebMcp) { Disable(say); WebMcp.SaveSettings(Installer.SettingsPath,new Dictionary<string,string>{{"mcp_lan_enabled","0"},{"mcp_lan_url",""},{"mcp_lan_urls",""}}); return; }
-            if(!Installer.ServiceRunning()||WebMcp.ReadSetting("mcp_enabled","0")!="1") throw new ArgumentException("잠금 화면 제어 서비스와 [LLM / MCP 설정]의 MCP 사용을 먼저 켜고 저장하세요.");
+            if(!Installer.ServiceRunning()) throw new ArgumentException("원격제어의 잠금 화면 제어 서비스를 먼저 켜세요.");
             Preflight(o,say); Activate(o,say);
         }
         internal static void Disable(Installer.Say say)
@@ -408,3 +408,4 @@ Write-Host ('Claude Code의 /mcp에서 '+$Name+'을 선택해 인증하세요. �
         }
     }
 }
+

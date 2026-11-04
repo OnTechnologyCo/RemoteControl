@@ -51,39 +51,44 @@ namespace RemoteControlSetup
         {
             if (!o.WebMcp) return;
             if (!o.LockScreen) throw new ArgumentException("웹 연결 자동 실행에는 잠금 화면 제어 서비스가 필요합니다.");
-            if (ReadSetting("pwhash", "").Length == 0) throw new ArgumentException("먼저 웹 연결을 선택하지 않고 설치하세요. 원격제어에서 ID와 비밀번호를 설정한 뒤 [LLM / MCP 설정] → [웹 ChatGPT / Claude 설정]에서 연결할 수 있습니다.");
+            if (ReadSetting("pwhash", "").Length == 0) throw new ArgumentException("먼저 웹 연결을 선택하지 않고 설치하세요. 원격제어에서 ID와 비밀번호를 설정한 뒤 [Web MCP 설정] → [웹 HTTPS 연결 설정]에서 연결할 수 있습니다.");
             if(o.WebTailscale || o.WebPrivate) {
-                if(LanPort()<1024)throw new ArgumentException("웹 MCP에 사용할 LAN MCP 포트는 1024 이상으로 지정하세요.");
+                if(LanPort()<1024)throw new ArgumentException("웹 MCP에 사용할 Web MCP 내부 포트는 1024 이상으로 지정하세요.");
                 if(!o.WebPrivate && o.WebPublicPort!=443 && o.WebPublicPort!=8443 && o.WebPublicPort!=10000)throw new ArgumentException("Tailscale MCP 공개 포트는 기본 443 또는 8443, 10000을 선택하세요.");
-                if(o.WebGatewayPort<1024||o.WebGatewayPort>65535||o.WebGatewayPort==LanPort()||o.WebGatewayPort==o.Port||o.Port==LanPort())throw new ArgumentException("로컬 중계 포트는 화면 및 LAN MCP 포트와 다르게 지정하세요.");
+                if(o.WebGatewayPort<1024||o.WebGatewayPort>65535||o.WebGatewayPort==LanPort()||o.WebGatewayPort==o.Port||o.Port==LanPort())throw new ArgumentException("로컬 중계 포트는 화면 및 Web MCP 내부 포트와 다르게 지정하세요.");
                 return;
             }
             o.WebUrl = NormalizeUrl(o.WebUrl);
             int port = new Uri(o.WebUrl).Port;
             if (!IsHttpsPort(port)) throw new ArgumentException("기본 HTTPS 포트 443 또는 전용 포트 1024~65535를 지정하세요.");
             if (o.Port == LanPort() || o.Port == port || LanPort() == port || port == 59332 || o.Port == 59332 || LanPort() == 59332)
-                throw new ArgumentException("화면, LAN MCP, HTTPS, 내부 중계(59332) 포트는 각각 달라야 합니다.");
+                throw new ArgumentException("화면, Web MCP 내부, HTTPS, 내부 중계(59332) 포트는 각각 달라야 합니다.");
         }
         internal static void ExtractPackages(string dir, string publicUrl)
         {
             for (string current = Path.GetFullPath(dir); !string.IsNullOrEmpty(current); current = Path.GetDirectoryName(current))
                 if (Directory.Exists(current) && (File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0) throw new IOException("설치 경로에 연결 폴더가 있습니다.");
             string plugins = Path.Combine(dir, "plugins"); Directory.CreateDirectory(plugins);
-            Sys.Extract("RemoteControl_MCP.zip", Path.Combine(plugins, "RemoteControl_MCP.zip"));
-            Sys.Extract("RemoteControl_Claude.mcpb", Path.Combine(plugins, "RemoteControl_Claude.mcpb"));
+            if ((File.GetAttributes(plugins) & FileAttributes.ReparsePoint) != 0) throw new IOException("연결 파일 폴더의 링크는 허용하지 않습니다.");
+            foreach (string name in new[] {"RemoteControl_MCP.zip", "RemoteControl_Claude.mcpb"}) {
+                string old = Path.Combine(plugins, name);
+                if (File.Exists(old)) {
+                    if ((File.GetAttributes(old) & FileAttributes.ReparsePoint) != 0) throw new IOException("이전 연결 파일의 링크는 허용하지 않습니다.");
+                    File.Delete(old);
+                }
+            }
             // 공개 서버 주소는 설치할 PC마다 다를 수 있어 플러그인 연결 정보를 설치 시 생성한다.
             if (!string.IsNullOrWhiteSpace(publicUrl)) WritePlugin(Path.Combine(plugins, PluginName), publicUrl);
             File.WriteAllText(Path.Combine(plugins, "웹-ChatGPT-업로드-안내.txt"),
                 string.IsNullOrWhiteSpace(publicUrl)
                 ? "웹 연결 설정을 건너뛰었습니다. 기존 웹 연결과 플러그인이 있으면 유지됩니다.\r\n" +
-                  "원격제어 → LLM / MCP 설정 → 웹 ChatGPT / Claude 설정에서 주소·포트·인증서를 지정하세요.\r\n" +
+                  "원격제어 → Web MCP 설정 → 웹 HTTPS 연결 설정에서 주소·포트·인증서를 지정하세요.\r\n" +
                   "설정을 적용하면 이 폴더에 " + PluginName + "이 생성됩니다.\r\n"
                 : "웹 ChatGPT 업로드 파일: " + PluginName + "\r\n" +
                 "MCP 주소: " + NormalizeUrl(publicUrl) + "/mcp\r\n" +
                 "공유기 TCP " + new Uri(publicUrl).Port + "을 이 PC의 같은 포트로 연결하세요.\r\n" +
                 "ChatGPT 연결 화면에서 기존 원격제어 ID/비밀번호로 로그인합니다.\r\n" +
                 "Claude는 사용자 지정 커넥터에 같은 MCP 주소를 입력합니다. OAuth client ID/secret은 비워 둡니다.\r\n" +
-                "RemoteControl_MCP.zip은 LAN/로컬 클라이언트용입니다.\r\n" +
                 "ZIP 생성은 공개 HTTPS 개통이나 ChatGPT 연결 성공을 의미하지 않습니다.\r\n", Utf8);
             string root = Path.GetFullPath(dir).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
             using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("RemoteControl_WebMCP.zip"))
@@ -117,7 +122,7 @@ namespace RemoteControlSetup
             {
                 Entry(zip, "plugin.json", json.Serialize(manifest));
                 Entry(zip, "mcp.json", json.Serialize(mcp));
-                Entry(zip, "skills/remotecontrol-web/SKILL.md", "---\nname: remotecontrol-web\ndescription: Inspect and manage the connected RemoteControl PC over HTTPS MCP.\n---\nCall pc_get_status first and verify the target hostname before changes. File paths are on that PC. Commands run with the remote agent Windows rights. Keep output concise. Never retry an execution after an uncertain transport failure. Reconnect through OAuth when authentication expires. Use pc_open_file_transfer for the authenticated browser file/folder picker and streaming downloads. Direct MCP binary transfers use pc_begin_upload, pc_write_upload_chunk, pc_finish_upload, pc_prepare_download and pc_read_download_chunk with SHA-256. Local and external clients use the same HTTPS /mcp address; no local connector installation is required.\n");
+                Entry(zip, "skills/remotecontrol-web/SKILL.md", "---\nname: remotecontrol-web\ndescription: Inspect and manage the connected RemoteControl PC over HTTPS MCP.\n---\nCall pc_get_status first and verify the target hostname before changes. File paths are on that PC. Commands run with the remote agent Windows rights. Keep output concise. Never retry an execution after an uncertain transport failure. Reconnect through OAuth when authentication expires. Use pc_open_file_transfer for the authenticated browser file/folder picker and streaming downloads. Direct MCP binary transfers use pc_begin_upload, pc_write_upload_chunk, pc_finish_upload, pc_prepare_download and pc_read_download_chunk with SHA-256. Local and external clients use the same HTTPS /mcp address; no local connector installation is required. For child PCs first use pc_list_bridge_pcs and pc_bridge_list_tools with the exact bridge_id and target_revision. Relay pc_get_status through pc_bridge_call, verify the child hostname, and supply expected_hostname for subsequent child calls. Keep the target ID and revision with job and transfer IDs. Local tools and pc_open_file_transfer address the main PC only; use chunk transfer tools through pc_bridge_call for children. Nested bridge relaying is not supported.\n");
                 Entry(zip, "README.md", "# RemoteControl Web\n\nMCP URL: " + origin + "/mcp\n\nSetup에서 웹 연결을 켜고 TCP " + new Uri(origin).Port + "과 공개 HTTPS 인증서가 정상인지 확인하세요. 연결 화면에서 원격제어 ID/비밀번호로 로그인합니다. 이 ZIP을 생성한 것만으로 외부 개통이 확인된 것은 아닙니다.\n");
             }
         }
@@ -158,7 +163,6 @@ namespace RemoteControlSetup
             Validate(o);
             if (!o.WebMcp) throw new ArgumentException("웹 연결 설정을 선택하세요.");
             if (!Installer.ServiceRunning()) throw new ArgumentException("원격제어에서 잠금 화면 제어 서비스를 먼저 켜세요.");
-            if (!o.WebTailscale && !o.WebPrivate && ReadSetting("mcp_enabled", "0") != "1") throw new ArgumentException("[LLM / MCP 설정]에서 LAN MCP 사용을 켜고 저장한 뒤 다시 적용하세요.");
             Preflight(o, say);
             Activate(o, say);
             if(o.WebTailscale || o.WebPrivate)return;
@@ -173,9 +177,8 @@ namespace RemoteControlSetup
         }
         private static void SaveWebMode(Options o)
         {
-            var changes=new Dictionary<string,string>{{"mcp_web_mode",o.WebPrivate?"private":o.WebTailscale?"tailscale":"ddns"}};
+            var changes=new Dictionary<string,string>{{"mcp_enabled","1"},{"mcp_web_mode",o.WebPrivate?"private":o.WebTailscale?"tailscale":"ddns"}};
             if(o.WebTailscale || o.WebPrivate){
-                changes["mcp_enabled"]="1";
                 if(o.WebPrivate){changes["mcp_private_gateway"]=o.WebGatewayPort.ToString();changes["mcp_private_revision"]=Guid.NewGuid().ToString("N");}
                 else{changes["mcp_ts_port"]=o.WebPublicPort.ToString();changes["mcp_ts_gateway"]=o.WebGatewayPort.ToString();changes["mcp_ts_revision"]=Guid.NewGuid().ToString("N");}
                 string prior=ReadSetting("mcp_web_url","");Uri u;
@@ -261,3 +264,4 @@ namespace RemoteControlSetup
         }
     }
 }
+

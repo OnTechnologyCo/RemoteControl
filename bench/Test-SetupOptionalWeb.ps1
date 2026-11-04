@@ -106,7 +106,7 @@ $stage=$web.GetMethod('ExtractPackages',$static)
 $stage.Invoke($null,[string[]]@($dest,''))|Out-Null
 $plugin=Join-Path $dest 'plugins\RemoteControl_WebPlugin.zip'
 Assert (-not (Test-Path -LiteralPath $plugin)) 'Deferred fresh install generated a misleading web plugin'
-foreach($relative in @('plugins\RemoteControl_MCP.zip','plugins\RemoteControl_Claude.mcpb','web-mcp\Install-WebMcp.ps1','web-mcp\Install-TailscaleMcp.ps1','web-mcp\tailscale-server.mjs','web-mcp\private-server.mjs','web-mcp\Install-PrivateMcp.ps1','web-mcp\Disable-PrivateMcp.ps1','web-mcp\node.exe')){
+foreach($relative in @('web-mcp\Install-WebMcp.ps1','web-mcp\Install-TailscaleMcp.ps1','web-mcp\tailscale-server.mjs','web-mcp\private-server.mjs','web-mcp\Install-PrivateMcp.ps1','web-mcp\Disable-PrivateMcp.ps1','web-mcp\node.exe')){
     Assert (Test-Path -LiteralPath (Join-Path $dest $relative)) "Missing deferred package: $relative"
 }
 $web.GetMethod('WritePlugin',$static).Invoke($null,[string[]]@($plugin,'https://later.example.test:59443'))|Out-Null
@@ -124,3 +124,4 @@ try {Assert (@((Controls $settingsForm)|Where-Object Name -eq 'ApplyWebSettings'
 $report=[ordered]@{Version=(Get-Item (Join-Path $root 'dist\RemoteControl_Setup.exe')).VersionInfo.FileVersion;DeferredInvalidInputs=4;SilentDefaultDeferred=$true;FieldsToggle=$true;EnabledEmptyUrlRejected=$true;DeferredPackages=$true;ExistingPluginPreserved=$true;LaterCustomUrlAndPort=$true;Default443Selection=$true;CustomPortRestored=$true;Default443PreservedOnModeSwitch=$true;OtherSettingsPreserved=$true;PostInstallSettingsUi=$true;TailscaleExplicitChoice=$true;ManualTailscaleHostnamePreserved=$true;ManualPortPreservedOnModeSwitch=$true;LiveServicesChanged=$false;FixtureDirectory=$dest}
 $report|ConvertTo-Json|Set-Content -LiteralPath (Join-Path $dest 'verification.json') -Encoding UTF8
 $report|ConvertTo-Json
+

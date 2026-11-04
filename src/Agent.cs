@@ -1,4 +1,4 @@
-﻿// 대리 프로세스. 서비스가 사람이 앉아 있는 세션에 SYSTEM 권한으로 밀어 넣는 쪽.
+// 대리 프로세스. 서비스가 사람이 앉아 있는 세션에 SYSTEM 권한으로 밀어 넣는 쪽.
 //
 // 창이 없다. 실제로 화면을 잡고 입력을 넣고 웹을 서비스하는 것은 전부 여기다.
 // 창(MainForm)은 이 상태를 파일로 읽어 보여 주기만 한다.
@@ -17,6 +17,10 @@ namespace RemoteControl
         internal static void Run()
         {
             Config.EnsureWritable(); // Policy is protected before any privileged work.
+            Server server = new Server();
+            server.Notice += delegate (string s) { SvcLog.Write(s); };
+            server.StartMcp();
+
             Native.MakeDpiAware();
             Tunnel.KillOrphans();
 
@@ -40,9 +44,6 @@ namespace RemoteControl
             // 이 PC 가 실제로 어떤 크기를 받아 주는지 남긴다.
             // 모니터 없는 PC 는 목록이 아주 좁다. 그 앞에 갈 수 없으니 기록으로 알아야 한다.
             try { SvcLog.Write("화면: " + Display.Report()); } catch { }
-
-            Server server = new Server();
-            server.Notice += delegate (string s) { SvcLog.Write(s); };
 
             if (!Config.HasPassword)
             {
@@ -82,8 +83,6 @@ namespace RemoteControl
                 // 창은 다른 프로세스다. 거기서 바꾼 것을 알려면 파일을 다시 봐야 한다.
                 Config.Reload();
                 RemoteTunnel.SyncSettings();
-                TailscaleMcp.Tick();
-                PrivateMcp.Tick();
 
                 int want = Config.Port;
                 if (want != server.Port && Config.HasPassword)
@@ -256,3 +255,4 @@ namespace RemoteControl
         internal bool McpWebReady;
     }
 }
+

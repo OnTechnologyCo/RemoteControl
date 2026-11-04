@@ -1,3 +1,7 @@
+## v1.9.7 Web MCP and immediate startup
+
+MCP clients now use HTTPS with OAuth, including LAN HTTPS connections. The direct LAN HTTP listener, stdio client, client configuration window, and legacy ZIP/MCPB packages are removed. The internal Web gateway backend listens only on localhost. Enabled MCP starts before screen initialization, and existing configured gateway tasks and HTTPS services are checked immediately and recovered when stopped. Running or disabled tasks, saved authentication, and connection settings are preserved. See [configuration](docs/webmcp.md) and [validation](docs/mcp-startup-197.md).
+
 ## v1.8.22 Inno Setup and optional Telegram credentials
 
 The public `RemoteControl_Setup.exe` now uses an Inno Setup wizard. Choose the installation folder, screen port and startup/service options, then optionally enter a Telegram bot token and chat ID. Blank values preserve existing settings. Tokens are protected with Windows DPAPI on the target PC and are never embedded in the public installer or passed on the command line. Web/LAN MCP configuration remains available after installation. Existing uninstall registration and settings are preserved. See the [installation and token transfer guide](docs/setup-1822.md).
@@ -9,7 +13,7 @@ Requires SSHTunnel 1.5.0 or newer and uses a stable service identity across reco
 
 Enable the independent LAN settings to connect a local MCP client to `https://LAN_IP/mcp` on HTTPS 443. Import the target PC public CA once, then authenticate with the existing RemoteControl credentials using DCR and PKCE. Server authentication and file transfers require no internet, DDNS, or tunnel. An owned external HTTPS service can share the same port by routing domain and IP hosts separately. Cloud ChatGPT/Claude cannot directly reach private LAN IPs or run offline. [LAN guide](docs/webmcp-lan-offline.md).
 
-# RemoteControl v1.8.22
+# RemoteControl v1.9.7
 
 [한국어](README.md) | [English](README.en.md)
 
@@ -35,11 +39,11 @@ The `pc_open_file_transfer` tool opens a one-time browser transfer page for uplo
 - Windows service, interactive-session agent, tray, and standalone modes
 - LAN PC bridging through one host
 - SSHTunnel-issued random HTTPS addresses and Tailscale external connections
-- A separate LAN MCP listener and an optional Node.js OAuth gateway for web MCP clients
+- Web MCP over HTTPS/OAuth with a localhost-only backend and optional LAN HTTPS access
 
 ## Build
 
-Use 64-bit Windows with the .NET Framework 4.x C# compiler. The Tailscale helper declares Go 1.26.6 in `tsproxy/go.mod`. The private tunnel helper uses the SSHTunnel 1.5.0+ Go SDK through the sibling source folder `../SSHTunnel` (`sshtunnel-client/go.mod`). The complete installer build also requires Node.js 24.14.0 or newer and npm. Dependency and runtime downloads may require internet access.
+Use 64-bit Windows with the .NET Framework 4.x C# compiler. Use the pinned Go toolchain in `build/Use-GoToolchain.ps1` and the helper `go.mod` files. The private tunnel helper uses the SSHTunnel 1.5.0+ Go SDK through the sibling source folder `../SSHTunnel` (`sshtunnel-client/go.mod`). The complete installer build also requires Node.js 24.14.0 or newer and npm. Dependency and runtime downloads may require internet access.
 
 Run from the project root:
 
@@ -47,7 +51,7 @@ Run from the project root:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\빌드_setup.ps1
 ```
 
-This builds the Tailscale and private tunnel Go helpers, application, MCP packages, web gateway package, and installer. Outputs are written to the project's `dist` directory. To build the application only, first prepare the Tailscale helper resource with `빌드_tsproxy.ps1`, then run `빌드.ps1`; it also builds the private tunnel helper.
+This builds the Tailscale and private tunnel Go helpers, application, Web MCP plugin, web gateway package, and installer. Outputs are written to the project's `dist` directory. To build the application only, first prepare the Tailscale helper resource with `빌드_tsproxy.ps1`, then run `빌드.ps1`; it also builds the private tunnel helper.
 
 Building does not install or restart the live service. Installation is a separate action and requires administrator rights.
 
@@ -70,16 +74,17 @@ The installer excludes saved Tailscale keys and Telegram chat IDs by default. Th
 | `tsproxy/` | Go Tailscale helper |
 | `sshtunnel-client/` | SSHTunnel Go SDK helper and MCP routing |
 | `web-mcp/` | Node.js OAuth gateway, configuration scripts, and tests |
-| `plugins/` | LAN MCP plugin and Claude extension manifests |
+| `plugins/` | Web MCP integration assets |
 | `bench/` | Isolated test fixtures and measurement tools |
 | `docs/` | Feature notes and recorded validation results |
 | `Setup*.cs` | Windows installer |
 | `빌드*.ps1` | Build and packaging scripts |
 
-See [LAN MCP usage](docs/mcp-lan.md), [web MCP](web-mcp/README.md), [external tunnel settings](docs/private-tunnel.md), and [performance notes](docs/4k-performance.md). Recorded measurements are historical results, not new measurements from this repository upload.
+See [Web MCP usage](docs/webmcp.md), [web MCP](web-mcp/README.md), [external tunnel settings](docs/private-tunnel.md), and [performance notes](docs/4k-performance.md). Recorded measurements are historical results, not new measurements from this repository upload.
 
 ## Repository scope
 
-This repository is private. It includes source, documentation, icons, build scripts, and test code. Live settings, passwords, tokens, OAuth state, certificates, tunnel identity, browser profiles, logs, test results, third-party runtime binaries, and compiled packages are excluded. Existing local source files and the running installation remain unchanged.
+This repository is public. It includes source, documentation, icons, build scripts, and test code. Live settings, passwords, tokens, OAuth state, certificates, tunnel identity, browser profiles, logs, test results, third-party runtime binaries, and compiled packages are excluded. Existing local source files and the running installation remain unchanged.
 
 No new project license has been assigned by this upload. Third-party dependencies retain their respective licenses.
+

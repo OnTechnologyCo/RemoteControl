@@ -21,6 +21,7 @@ namespace RemoteControl
         private TcpListener listener;
         private Thread acceptThread;
         private McpHost mcp;
+        private McpGatewayStartup mcpGateway;
         internal string McpNote { get { return mcp == null ? "MCP 꺼짐" : mcp.Note; } }
 
         private int port;
@@ -38,8 +39,18 @@ namespace RemoteControl
         internal int Port { get { return port; } }
         internal string LastError = "";
 
+        internal void StartMcp()
+        {
+            if (mcp != null) return;
+            mcp = new McpHost(delegate { var o=McpOptions.Load(); o.Enabled &= Config.HasPassword; return o; }, Config.CheckLogin, SvcLog.Write);
+            mcp.Start();
+            mcpGateway = new McpGatewayStartup();
+        }
+
         internal bool Start(int p, bool startMcp = false)
         {
+            // 화면 포트 충돌이 별도 MCP 포트의 시작까지 막으면 안 된다.
+            if (startMcp) StartMcp();
             try
             {
                 listener = new TcpListener(IPAddress.Any, p);
@@ -53,11 +64,6 @@ namespace RemoteControl
                 acceptThread.Start();
 
                 LastError = "";
-                if (startMcp && mcp == null)
-                {
-                    mcp = new McpHost(delegate { var o=McpOptions.Load(); o.Enabled &= Config.HasPassword; return o; }, Config.CheckLogin, SvcLog.Write);
-                    mcp.Start();
-                }
                 return true;
             }
             catch (Exception ex)
@@ -72,6 +78,7 @@ namespace RemoteControl
         {
             // 연결 종료/포트 변경 시 모니터가 검은 상태로 남지 않도록 복구한다.
             PrivacyScreen.Reset();
+            if (mcpGateway != null) { mcpGateway.Dispose(); mcpGateway = null; }
             if (mcp != null) { mcp.Dispose(); mcp = null; }
             try
             {
@@ -202,6 +209,8 @@ namespace RemoteControl
                         SendIcon(stream, Pwa.Icon(64, false));
                         return;
                 }
+
+                if(path=="/bridge/mcp") { McpBridge.Receive(stream,method,lines,preRead,sess,mcp);return; }
 
                 // 여기부터는 로그인이 필요하다.
                 if (sess == null)
@@ -1421,3 +1430,5 @@ namespace RemoteControl
         }
     }
 }
+
+

@@ -1,4 +1,4 @@
-// 오프라인 대상 PC는 Remote의 ID/PW만 사용한다. MCP 설정에 인터넷 계정/토큰은 없다.
+// Web MCP 내부 처리 및 공통 파일 도구 설정.
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -25,7 +25,7 @@ namespace RemoteControl
         internal static object Text(object result) { return new { content = new[] { new { type = "text", text = Write(result) } } }; }
         internal static object ToolError(Exception error)
         {
-            string code = error is McpCapabilityDisabledException ? "CAPABILITY_DISABLED" : error is UnauthorizedAccessException ? "ACCESS_DENIED" :
+            string code = error is McpBridgeException ? ((McpBridgeException)error).Code : error is McpCapabilityDisabledException ? "CAPABILITY_DISABLED" : error is UnauthorizedAccessException ? "ACCESS_DENIED" :
                 error is FileNotFoundException || error is DirectoryNotFoundException ? "NOT_FOUND" :
                 error is ArgumentException ? "INVALID_ARGUMENT" : error is IOException ? "IO_ERROR" : "OPERATION_FAILED";
             return new { isError = true, content = new[] { new { type = "text", text = error.Message } }, structuredContent = new { error_code = code } };
@@ -42,7 +42,6 @@ namespace RemoteControl
         internal bool Enabled, AllowCommands = true, AllowScreen = true;
         internal int Port = 5901;
         internal string[] Workspaces = new string[0];
-        internal string AllowedNetworks = "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16";
         internal string CredentialStamp = "";
         // 배포한 사용자 프로그램은 RemoteControl 제거 시 지우는 설정 폴더 밖에 둔다.
         internal static string DefaultWorkspace { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonDocuments), "RemoteControlDeploy"); } }
@@ -54,7 +53,6 @@ namespace RemoteControl
             o.AllowCommands = Config.Get("mcp_commands") != "0"; o.AllowScreen = Config.Get("mcp_screen") != "0";
             // Preserve the existing storage key; these are default workspaces, never an access allowlist.
             string workspaces = Config.Get("mcp_roots"); o.Workspaces = (string.IsNullOrEmpty(workspaces) ? DefaultWorkspace : workspaces).Split('|');
-            string networks = Config.Get("mcp_networks"); if (!string.IsNullOrEmpty(networks)) o.AllowedNetworks = networks;
             o.Validate(); return o;
         }
         internal void Validate()
@@ -62,24 +60,6 @@ namespace RemoteControl
             if (Port < 1 || Port > 65535) throw new ArgumentException("MCP 포트는 1~65535여야 합니다.");
             if (Workspaces.Length < 1 || Workspaces.Length > 32) throw new ArgumentException("기본 작업공간을 1~32개 지정하세요. 접근 권한을 제한하는 목록이 아닙니다.");
             for (int i = 0; i < Workspaces.Length; i++) Workspaces[i] = McpPath.Absolute(Workspaces[i]);
-            foreach (string network in AllowedNetworks.Split(',')) Network(network, IPAddress.Loopback, true);
-        }
-        internal bool Accepts(IPAddress ip)
-        {
-            if (IPAddress.IsLoopback(ip)) return true;
-            foreach (string network in AllowedNetworks.Split(',')) if (Network(network, ip, false)) return true;
-            return false;
-        }
-        private static bool Network(string text, IPAddress ip, bool validate)
-        {
-            string[] parts = text.Trim().Split('/'); IPAddress address; int bits = 32;
-            if (parts.Length > 2 || !IPAddress.TryParse(parts[0], out address) || address.GetAddressBytes().Length != 4 ||
-                (parts.Length == 2 && (!int.TryParse(parts[1], out bits) || bits < 0 || bits > 32)))
-                throw new ArgumentException("허용 IP/대역은 IPv4 주소 또는 CIDR을 쉼표로 구분하세요.");
-            if (validate) return true;
-            byte[] a = address.GetAddressBytes(), b = ip.GetAddressBytes(); if (b.Length != 4) return false;
-            for (int n = 0; n < 4; n++) { int used = Math.Max(0, Math.Min(8, bits - n * 8)); int mask = 255 << (8 - used); if ((a[n] & mask) != (b[n] & mask)) return false; }
-            return true;
         }
     }
 
@@ -118,3 +98,5 @@ namespace RemoteControl
         }
     }
 }
+
+

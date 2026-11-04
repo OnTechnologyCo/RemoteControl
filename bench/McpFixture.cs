@@ -11,13 +11,11 @@ namespace RemoteControl
         public static int Main(string[] args)
         {
             if(args.Length>0&&args[0]=="--mcp-job")return McpJobRunner.Run(args);
-            if(args.Length>0&&args[0]=="--mcp-client")return McpClient.Run(args);
             if(args.Length==2&&(args[0]=="--session-save"||args[0]=="--session-check"))return McpSessionsTest.Run(args[0],args[1]);
             if(args.Length==2&&args[0]=="--probe") {File.WriteAllText(args[1],"remote-probe-v1");Console.WriteLine("deployed binary executed");return 23;}
             if(args.Length==2&&args[0]=="--ui-proof") {
                 System.Windows.Forms.Application.EnableVisualStyles();
                 using(var form=new McpForm(delegate{return "MCP 대기 중 · 포트 5901";}))Draw(form,Path.Combine(args[1],"mcp-settings.png"));
-                using(var form=new McpClientForm())Draw(form,Path.Combine(args[1],"mcp-client.png"));
                 return 0;
             }
             if(args.Length!=1)return 64;
@@ -51,3 +49,4 @@ namespace RemoteControl
         }
     }
 }
+

@@ -1,4 +1,8 @@
-# 원격제어 v1.9.6
+# 원격제어 v1.9.7
+
+## v1.9.7 Web MCP 통합 및 즉시 자동 시작
+
+MCP 연결은 HTTPS/OAuth를 사용하는 Web MCP로 통일했습니다. 이전 직접 LAN 접속·stdio 연결기·MCPB 패키지와 내부 포트/허용 IP 입력 화면은 제거했습니다. 내부망에서도 LAN HTTPS 연결을 사용합니다. 저장된 Web MCP 사용 설정에 따라 화면 초기화 전에 내부 처리 서버를 시작합니다. 화면 포트 충돌이 MCP 시작을 막지 않으며, MCP 포트 충돌은 자동 재시도합니다. 기존에 설정된 웹 MCP 중계 작업과 HTTPS 서비스를 바로 확인하고 중지 상태이면 실행합니다. 초기 터널 연결의 5초 고정 대기를 제거했습니다. 인증·주소·사용 안 함 설정은 유지합니다. [동작과 검증](docs/mcp-startup-197.md).
 
 ## v1.9.6 100MB 초과 웹 업로드 개선
 
@@ -48,19 +52,19 @@ AMD GPU와 Chrome에서 1080p·4K 암호화 영상 전송, 전송률 변경, 자
 
 ## v1.8.22 Inno Setup 및 텔레그램 토큰 입력
 
-`dist\RemoteControl_Setup.exe`는 Inno Setup 마법사입니다. 설치 경로·화면 포트·자동 실행·방화벽·가상 모니터를 선택하고, 선택 사항인 **텔레그램 알림** 단계에서 봇 토큰과 chat_id를 입력할 수 있습니다. 비워 두면 기존 값이 유지됩니다. 웹/LAN MCP 설정은 설치 완료 화면 또는 본체의 **LLM / MCP 설정**에서 열 수 있습니다.
+`dist\RemoteControl_Setup.exe`는 Inno Setup 마법사입니다. 설치 경로·화면 포트·자동 실행·방화벽·가상 모니터를 선택하고, 선택 사항인 **텔레그램 알림** 단계에서 봇 토큰과 chat_id를 입력할 수 있습니다. 비워 두면 기존 값이 유지됩니다. 웹/LAN MCP 설정은 설치 완료 화면 또는 본체의 **Web MCP 설정**에서 열 수 있습니다.
 
 공개 설치 파일에는 실제 봇 토큰이 없습니다. 입력한 토큰은 대상 PC의 DPAPI 저장소에 암호화하며 명령줄·설치 로그에 넣지 않습니다. 기존 설치 엔진과 제거 등록을 유지하여 중복 프로그램 항목을 만들지 않습니다. [설치·개인용 토큰 이전 안내](docs/setup-1822.md).
 
 ## v1.8.18 LAN WebMCP 다중 IP·연결 설정 복사
 
-**LLM / MCP 설정 → LAN / 내부망 설정**에서 랜카드별 IPv4를 확인하고 기본·추가 접속 IP를 등록합니다. 적용 후 사용할 IP를 선택하면 Claude Code 명령, VS Code JSON, Cursor JSON, Codex 명령·TOML을 복사할 수 있습니다. 전체 연결 안내에는 MCP·인증 주소, 공개 CA 다운로드 주소와 실제 CA 파일의 SHA256을 포함합니다.
+**Web MCP 설정 → LAN / 내부망 설정**에서 랜카드별 IPv4를 확인하고 기본·추가 접속 IP를 등록합니다. 적용 후 사용할 IP를 선택하면 Claude Code 명령, VS Code JSON, Cursor JSON, Codex 명령·TOML을 복사할 수 있습니다. 전체 연결 안내에는 MCP·인증 주소, 공개 CA 다운로드 주소와 실제 CA 파일의 SHA256을 포함합니다.
 
 각 IP는 자신의 HTTPS/OAuth 주소로 연결되며, 기존 주소의 인증 상태와 공개 CA는 유지됩니다. [설정·CA 등록·클라이언트 예제](docs/webmcp-lan-offline.md).
 
 ## v1.8.14 WebMCP 파일·폴더 전송
 
-로컬·외부 LLM은 같은 HTTPS `/mcp` 주소를 사용합니다. LLM PC에 별도 연결기를 설치하지 않습니다. **LLM / MCP 설정 → WebMCP 주소 복사**로 등록 주소를 복사하고 기존 Remote ID/PW로 로그인합니다.
+로컬·외부 LLM은 같은 HTTPS `/mcp` 주소를 사용합니다. LLM PC에 별도 연결기를 설치하지 않습니다. **Web MCP 설정 → Web MCP 주소 복사**로 등록 주소를 복사하고 기존 Remote ID/PW로 로그인합니다.
 
 `pc_open_file_transfer`가 발급한 일회용 링크를 열면 브라우저에서 파일·폴더를 선택해 보내거나 원격 파일·폴더 ZIP을 받습니다. 직접 MCP 바이너리 전송도 256KiB 분할 전송과 SHA-256 검증을 지원합니다. 중단된 업로드는 전송 ID·원본을 보존해 24시간 안에 재개할 수 있습니다. 파일 최대 4GiB, 폴더 합계 8GiB, 항목 10000개입니다. [전송 사용법](docs/webmcp-file-transfer.md).
 
@@ -68,13 +72,13 @@ AMD GPU와 Chrome에서 1080p·4K 암호화 영상 전송, 전송률 변경, 자
 
 MCP 인증은 원격제어·웹 중계 재시작과 일시적인 통신 장애 뒤에도 유지됩니다. 로그아웃, 앱 연결 해제 또는 원격제어 ID·비밀번호 변경 시 해제됩니다. 화면용 브라우저 로그인은 기존 8시간 정책을 유지합니다. 이전 버전의 메모리 인증은 이전할 수 없어 업데이트 후 처음 한 번 다시 로그인해야 합니다.
 
-인증 상태는 LAN에서 Windows DPAPI, 웹 중계에서 AES-256-GCM으로 암호화합니다. 비밀번호는 저장하지 않습니다. access token은 1시간, refresh token은 회전하며 지속 인증합니다. 임시 통신 실패는 인증 해제로 취급하지 않고, 실행 명령은 자동 재전송하지 않습니다.
+인증 상태는 localhost 내부 처리기에서 Windows DPAPI, 웹 중계에서 AES-256-GCM으로 암호화합니다. 비밀번호는 저장하지 않습니다. access token은 1시간, refresh token은 회전하며 지속 인증합니다. 임시 통신 실패는 인증 해제로 취급하지 않고, 실행 명령은 자동 재전송하지 않습니다.
 
 프라이빗 터널의 DNS·HTTPS 443·인증서 실패 때 살아 있는 SSH 연결과 발급 주소를 보존하고 원인을 표시합니다. 실제 SSH 연결이 종료되면 자동 재연결합니다. SSHTunnel 서버의 주소 길이 정책은 서버가 결정하며 클라이언트는 고정 길이를 요구하지 않습니다.
 
 프라이빗 터널은 SSHTunnel 1.3 웹 API를 사용해 `https://랜덤키.터널도메인` 주소를 자동 발급받습니다. **외부망 → 연결 설정**에서 서버 주소·SSH 포트·계정·인증키·서버 지문을 입력하세요. [SSHTunnel 설정·사용법](docs/private-tunnel.md)을 참조하세요.
 
-인터넷 없는 LAN PC를 Claude·로컬 MCP 지원 GPT 앱에서 진단하고 프로그램을 배포할 수 있습니다. **설정 → LLM / MCP 설정**에서 포트·접속 허용 IP·기본 작업공간을 지정하며, 기존 Remote ID/PW로 로그인합니다. [MCP 설치·연결·사용법](docs/mcp-lan.md)을 참조하세요.
+내부망은 **Web MCP 설정 → 내부망 HTTPS 설정**에서 연결합니다. 로컬 MCP 클라이언트는 공개 CA를 등록하고 HTTPS `/mcp` 주소와 OAuth 로그인을 사용합니다. [Web MCP 사용법](docs/webmcp.md)을 참조하세요.
 
 4K 화면의 타일 준비·JPEG 압축·브라우저 디코딩과 전송 대기를 개선했습니다. 빠른 연결에서는 큰 타일과 전송 묶음을 사용하고, 수신이 밀리면 작은 타일로 돌아갑니다. 해상도는 유지합니다. 측정 조건과 한계는 [4K 성능 기록](docs/4k-performance.md)을 참조하세요.
 
@@ -88,8 +92,7 @@ MCP 인증은 원격제어·웹 중계 재시작과 일시적인 통신 장애 �
 |---|---|
 | `dist\RemoteControl.exe` | 프로그램 본체 |
 | `dist\RemoteControl_Setup.exe` | 공유할 PC 설치·업데이트용 setup |
-| `dist\RemoteControl_MCP.zip` | LLM PC의 로컬 MCP/플러그인 수동 등록 패키지 |
-| `dist\RemoteControl_Claude.mcpb` | Claude Desktop Windows 확장 |
+| `dist\RemoteControl_WebPlugin.zip` | HTTPS/OAuth MCP 연결 플러그인 |
 
 프로젝트 폴더에서 아래 명령 하나로 본체와 setup을 함께 갱신합니다.
 
@@ -107,7 +110,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\빌드_setup.ps1
 
 ## 변경 내용
 
-- [오프라인 LAN MCP: Claude·Codex 연결 및 프로그램 배포](docs/mcp-lan.md)
+- [Web MCP: HTTPS 연결과 자동 시작](docs/webmcp.md)
 - [4K 화면 성능 개선과 측정값](docs/4k-performance.md)
 - [다중 파일·폴더 올리기](docs/file-upload.md)
 - [외부망 연결 설정: SSHTunnel 랜덤 웹 주소 / Tailscale 선택](docs/private-tunnel.md)
@@ -116,3 +119,4 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\빌드_setup.ps1
 새 버전의 **외부망 → 연결 설정**에서 연결 방식과 SSH 주소·포트를 지정합니다. 아직 값이 정해지지 않았다면 자동 연결을 끄고 빈 설정을 저장할 수 있습니다.
 
 `src`, `web`, `bench`, `docs`, `vdd`는 원본 및 시험 코드입니다. `artifacts`는 시험 결과 전용이며 배포 파일을 두지 않습니다.
+
