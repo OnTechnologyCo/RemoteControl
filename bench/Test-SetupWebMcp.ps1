@@ -1,4 +1,4 @@
-﻿# Setup의 Main/Install을 실행하지 않는다. 실제 EXE의 파일 배치 경로만 격리 폴더에서 호출한다.
+# Setup의 Main/Install을 실행하지 않는다. 실제 EXE의 파일 배치 경로만 격리 폴더에서 호출한다.
 
 $ErrorActionPreference='Stop'
 
@@ -28,7 +28,7 @@ if($version -ne (Get-Item -LiteralPath (Join-Path $root 'dist\RemoteControl.exe'
 
 $resources=$assembly.GetManifestResourceNames()
 
-foreach($name in @('RemoteControl.exe','RemoteControl_MCP.zip','RemoteControl_Claude.mcpb','RemoteControl_WebMCP.zip')) {
+foreach($name in @('RemoteControl.exe','RemoteControl_WebMCP.zip')) {
 
     if($resources -notcontains $name){throw "Setup 리소스 누락: $name"}
 
@@ -44,7 +44,7 @@ $stage.Invoke($null,[string[]]@($dest,'https://najhna.dyndns.org:59334')) | Out-
 
 $plugin=Join-Path $dest 'plugins\RemoteControl_WebPlugin.zip'
 
-foreach($path in @('plugins\RemoteControl_MCP.zip','plugins\RemoteControl_Claude.mcpb','plugins\RemoteControl_WebPlugin.zip','plugins\웹-ChatGPT-업로드-안내.txt','web-mcp\node.exe','web-mcp\caddy.exe','web-mcp\Install-WebMcp.ps1','web-mcp\gateway.mjs','web-mcp\auth-state.mjs','web-mcp\transfers.mjs','web-mcp\transfer-client.mjs','web-mcp\node_modules\@modelcontextprotocol\sdk\package.json')) {
+foreach($path in @('plugins\RemoteControl_WebPlugin.zip','plugins\웹-ChatGPT-업로드-안내.txt','web-mcp\node.exe','web-mcp\caddy.exe','web-mcp\Install-WebMcp.ps1','web-mcp\gateway.mjs','web-mcp\auth-state.mjs','web-mcp\transfers.mjs','web-mcp\transfer-client.mjs','web-mcp\node_modules\@modelcontextprotocol\sdk\package.json')) {
 
     if(-not(Test-Path -LiteralPath (Join-Path $dest $path))){throw "설치 파일 배치 누락: $path"}
 
@@ -161,13 +161,13 @@ try {
 
 }finally{$form.Dispose()}
 
-# dist에도 동일한 생성 경로로 업로드 파일을 둔다. 설치할 때는 입력한 DDNS에 맞춰 다시 생성된다.
-
-$write.Invoke($null,[string[]]@((Join-Path $root 'dist\RemoteControl_WebPlugin.zip'),'https://najhna.dyndns.org:59334')) | Out-Null
+# 검증은 격리 폴더에서만 수행하며 dist 배포물을 변경하지 않는다.
 
 $report=[ordered]@{Setup=$setup;Version=$version;SetupSha256=(Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash;EmbeddedResourcesMatch=$true;PluginAutoPlacement=$true;PluginTransport='streamable-http';PluginUrl='https://najhna.dyndns.org:59334/mcp';CustomDdnsAndPortTest=$true;Default443PluginUrl=$true;InvalidUrlsRejected=5;SetupUi=$true;FixtureDirectory=$dest;LiveServicesChanged=$false;PublicHttpsVerified=$false;ChatGptAccountConnected=$false}
 
 $report | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $dest 'verification.json') -Encoding UTF8
 
 $report | ConvertTo-Json
+
+
 

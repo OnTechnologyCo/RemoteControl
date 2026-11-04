@@ -1,3 +1,7 @@
+## Web MCP와 브릿지 (v1.9.7)
+
+현재 연결은 HTTPS/OAuth만 제공합니다. stdio 연결기·MCPB·직접 LAN MCP 연결은 제거되었습니다. 하위 PC는 기존 브릿지 등록과 MCP 사용 설정으로 메인의 Web MCP를 통해 제어합니다. [현재 설정 안내](../docs/webmcp.md), [브릿지 MCP 안내](../docs/mcp-bridge-197.md).
+
 ## LAN IP / 인터넷 없는 내부망 (v1.8.18)
 
 여러 랜카드의 기본·추가 IPv4를 등록하고 적용하면 **연결 스크립트** 창에서 사용할 IP를 선택해 Claude Code, VS Code, Cursor, Codex 설정을 복사할 수 있다. 전체 안내는 각 IP의 `/mcp`, `/authorize`, `/ca/RemoteControl-LAN-CA.crt` 주소와 실제 공개 CA PEM 파일 바이트의 SHA256을 포함한다. 기본 포트 443은 URL에서 생략하며, 다른 포트는 모든 주소에 반영한다.
@@ -52,7 +56,7 @@ MCP 작업공간은 기본 작업 위치이며 접근 제한 목록이 아니다
 
 로그인 화면에 실제 실행 권한을 표시하고 연결 동의를 받는다.
 
-화면·외부망 터널 포트에는 명령 API를 추가하지 않는다.
+외부 MCP API는 HTTPS/OAuth /mcp로 제공한다. 하위 PC의 기존 화면 포트는 원격제어 인증과 MCP 사용 설정을 요구하는 고정 브릿지 중계 프로토콜 /bridge/mcp를 함께 처리한다.
 
 
 

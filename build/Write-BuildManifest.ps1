@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param([Parameter(Mandatory=$true)][string]$Root, [string]$InnoCompiler)
 $ErrorActionPreference = 'Stop'
 $Root = [IO.Path]::GetFullPath($Root).TrimEnd('\')
@@ -34,7 +34,7 @@ foreach ($name in $assembly.GetManifestResourceNames()) {
     try { $resources += [ordered]@{Name=$name;Length=$stream.Length;SHA256=[BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-','')} }
     finally { $stream.Dispose() }
 }
-foreach ($name in 'RemoteControl.exe','RemoteControl_MCP.zip','RemoteControl_Claude.mcpb','RemoteControl_WebMCP.zip') {
+foreach ($name in 'RemoteControl.exe','RemoteControl_WebMCP.zip') {
     $resource = @($resources | Where-Object {$_.Name -ceq $name})
     if ($resource.Count -ne 1 -or $resource[0].SHA256 -cne (Get-FileHash -LiteralPath (Join-Path $dist $name)).Hash) {
         throw "Embedded payload does not match this build: $name"
@@ -55,3 +55,4 @@ if($inno){$manifest.Toolchain['InnoCompilerSHA256']=(Get-FileHash -LiteralPath $
 $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $dist 'RemoteControl.build.json') -Encoding UTF8
 $sha.Dispose()
 'Build manifest: '+(Join-Path $dist 'RemoteControl.build.json')
+

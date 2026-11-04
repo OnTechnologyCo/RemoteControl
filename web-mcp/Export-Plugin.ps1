@@ -1,4 +1,4 @@
-﻿# 외부 HTTPS가 실제 개통된 후에만 연결 패키지를 만든다. 가짜 app ID를 만들지 않는다.
+# 외부 HTTPS가 실제 개통된 후에만 연결 패키지를 만든다. 가짜 app ID를 만들지 않는다.
 
 [CmdletBinding()]
 
@@ -32,11 +32,11 @@ try {
 
     $files=@{
 
-        'plugin.json'=(@{'$schema'='https://agent-plugins.org/schemas/1.0.0/plugin.schema.json';name='remotecontrol-web';version='1.8.10';description='Control an authorized RemoteControl PC through HTTPS and OAuth.';author=@{name='ontech'}} | ConvertTo-Json -Depth 8)
+        'plugin.json'=(@{'$schema'='https://agent-plugins.org/schemas/1.0.0/plugin.schema.json';name='remotecontrol-web';version='1.9.7';description='Control an authorized RemoteControl PC through HTTPS and OAuth.';author=@{name='ontech'}} | ConvertTo-Json -Depth 8)
 
         'mcp.json'=(@{'$schema'='https://agent-plugins.org/schemas/1.0.0/mcp.schema.json';mcpServers=@{'remotecontrol-web'=@{type='streamable-http';url=($origin+'/mcp')}}} | ConvertTo-Json -Depth 8)
 
-        'skills/remotecontrol-web/SKILL.md'="---`nname: remotecontrol-web`ndescription: Inspect and manage the connected RemoteControl PC over HTTPS MCP.`n---`nCall pc_get_status first and verify the target hostname before changes. File paths refer to that PC. Commands use the remote agent's Windows rights. Keep output concise. Never retry an execution after an uncertain transport failure. Reconnect through OAuth when authentication expires. Use pc_open_file_transfer for browser file/folder uploads and streamed downloads. Direct binary transfers use pc_begin_upload, pc_write_upload_chunk, pc_finish_upload, pc_prepare_download and pc_read_download_chunk with SHA-256. Local and external clients use the same HTTPS /mcp URL without installing a local connector.`n"
+        'skills/remotecontrol-web/SKILL.md'="---`nname: remotecontrol-web`ndescription: Inspect and manage the connected RemoteControl PC over HTTPS MCP.`n---`nCall pc_get_status first and verify the target hostname before changes. File paths refer to that PC. Commands use the remote agent's Windows rights. Keep output concise. Never retry an execution after an uncertain transport failure. Reconnect through OAuth when authentication expires. Use pc_open_file_transfer for browser file/folder uploads and streamed downloads. Direct binary transfers use pc_begin_upload, pc_write_upload_chunk, pc_finish_upload, pc_prepare_download and pc_read_download_chunk with SHA-256. Local and external clients use the same HTTPS /mcp URL without installing a local connector. For child PCs first use pc_list_bridge_pcs and pc_bridge_list_tools with the exact bridge_id and target_revision. Relay pc_get_status through pc_bridge_call, verify the child hostname, and supply expected_hostname for subsequent child calls. Keep the target ID and revision with job and transfer IDs. Local tools and pc_open_file_transfer address the main PC only; use chunk transfer tools through pc_bridge_call for children. Nested bridge relaying is not supported.`n"
 
     }
 
@@ -45,4 +45,3 @@ try {
 }finally{$zip.Dispose();$file.Dispose()}
 
 "검증된 웹 MCP 연결 패키지: $Destination"
-

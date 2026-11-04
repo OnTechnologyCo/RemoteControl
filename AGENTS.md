@@ -1,3 +1,25 @@
+## 브릿지 MCP 중계 (v1.9.7)
+
+- 외부 MCP는 메인의 HTTPS/OAuth 연결을 사용한다. 고정 POST /bridge/mcp는 기존 화면 브릿지 인증과 MCP 사용 설정을 요구하는 내부 중계 프로토콜이다. stdio/직접 LAN MCP listener는 복원하지 않는다. 브릿지 구간의 기존 HTTP는 신뢰된 LAN/VPN에서 사용한다.
+- pc_list_bridge_pcs / pc_bridge_list_tools / pc_bridge_call은 등록된 bridge_id와 설정 revision으로 대상을 고정한다. 상태 외 호출은 하위 hostname을 실행 직전에 확인한다. 주소 변경·실패 시 로컬 또는 다른 PC로 폴백하거나 변형 요청을 자동 재전송하지 않는다.
+- 양쪽 명령/화면 정책과 기존 파일 SHA/경로 검증을 유지한다. 프로세스/전송 소유권은 부모 MCP 로그인과 대상에 결합하며 하위 웹 로그인 갱신과 분리한다. 중첩 브릿지와 하위 브라우저 전송 링크는 지원하지 않는다.
+- bench/Test-McpBridge.ps1은 별도 설정·임시 포트의 세 프로세스와 OAuth Web gateway로 중계/분리/복구를 확인한다. 운영 서비스를 시험용으로 재시작하지 않는다. 상세: docs/mcp-bridge-197.md.
+
+## Web MCP 전용 연결 (v1.9.7)
+
+- 외부 MCP 연결은 HTTPS/OAuth만 제공한다. stdio 클라이언트·MCPB·직접 LAN 포트 연결 UI/패키지를 복원하지 않는다.
+- McpHost는 웹 중계용 내부 처리기로 127.0.0.1에만 독점 바인딩한다. 설정 mcp_port와 기존 인증 상태는 웹 중계 호환용으로 보존하며 외부 접속 주소로 안내하지 않는다. mcp_networks는 사용하지 않는다.
+- Web MCP 설정은 사용 여부·작업공간·명령/화면 기능 및 외부/내부망 HTTPS 연결만 제공한다. 웹 연결 적용 성공 후 mcp_enabled를 함께 켠다. LAN HTTPS/OAuth는 유지한다.
+- Setup은 WebMCP/WebPlugin만 포장하고 업그레이드 시 설치 폴더의 두 고정 구형 배포 패키지만 제거한다. 사용자의 다른 MCP 등록이나 인증 파일은 삭제하지 않는다.
+- Test-Mcp는 실제 OAuth Web gateway와 내부 Windows 처리기를 이어 파일·명령을 검증한다. Test-WebOnly는 구형 진입점·패키지 미포함과 설정 화면을 검증한다.
+
+## MCP 즉시 자동 시작 (v1.9.7)
+
+- `Server.StartMcp()`는 화면 포트 및 디스플레이 초기화와 독립적으로 한 번 시작한다. MCP 사용 설정과 비밀번호 검사를 유지하고 `Stop()`에서 감시 타이머와 호스트를 함께 닫는다.
+- `McpGatewayStartup`은 관리자/SYSTEM에서 설정된 기존 MCP 예약 작업과 HTTPS 서비스만 복구한다. 등록·활성화·설정 변경은 하지 않는다. 작업의 Disabled/Queued/Running 상태를 존중하고 LAN 공유 HTTPS 소유권을 유지한다. 인증 정보와 공개 주소를 로그에 넣지 않는다.
+- 주소 heartbeat는 화면/UI 상태 타이머와 독립적으로 유지한다. 터널 감시는 Enable 때 즉시 깨우며 재시도 지연과 인증 검사는 유지한다.
+- `bench/Test-McpStartup.ps1`은 격리 설정·임시 포트로 시작/충돌/재시도/비활성화/중복 방지와 게이트웨이 선택을 검증한다. 운영 서비스·작업·설정을 시험 목적으로 변경하지 않는다.
+
 ## 100MB 초과 브라우저 파일 업로드 개선 (v1.9.6)
 
 - 웹 8MiB 초과 파일 업로드는 반드시 2MiB씩 multipart 분할 전송한다. Cloudflare 등 프록시가 100MB 단일 요청을 거부할 수 있다. 화면 WebSocket과 분리하여 파일 큐·기존 다운로드는 유지한다.
@@ -215,22 +237,10 @@
   같은 DDNS의 다른 HTTP 포트를 함께 쓰므로 HSTS를 켜지 않는다. HSTS는 포트별 설정이 아니다.
   v1.8.2는 `max-age=0`으로 이전 배포가 브라우저에 남긴 정책까지 해제한다.
 
-- `src/McpHost.cs`: 별도 LAN 포트(기본 5901), Remote ID/PW 로그인, Streamable HTTP JSON-RPC.
-  기본 꺼짐. 화면/터널 포트에 명령 API를 노출하지 않는다. 설정은 `mcp_*` 키.
-- `McpTools.cs`, `McpProcesses.cs`: 파일·SHA-256·백업·소유 작업·출력·로그·화면.
-  작업공간은 기본 위치이며 접근 제한 목록이 아니다. 파일·전송·명시적 cwd도 작업공간 밖 로컬 경로를 사용한다. 작업당 1시간, 동시 8개, 출력 최근 128Ki 문자.
-  `--mcp-job` helper의 Job Object는 그 작업의 자손만 정리한다. 프로세스 이름으로 죽이지 않는다.
-- `McpClient.cs`: LLM PC의 `--mcp-client` stdio 연결기. 로그인 갱신은 명시적인 401일 때만
-  한 번 재시도한다. 전송 장애 뒤 실행 명령을 무작정 재전송하지 않는다. 업로드/다운로드는
-  스트리밍하고 SHA-256을 확인한다. `--mcp-config` 설정은 사용자 DPAPI로 비밀번호를 저장한다.
-- `McpForm.cs`: 대상 설정 및 LLM PC 연결 설정 창. 외부망 화면과 별개다.
-- `빌드_setup.ps1`은 본체 → `빌드_mcp.ps1` → setup 순서. 모든 배포물은 `dist` 고정.
-  setup에 MCP ZIP과 Claude MCPB를 포함해 설치 폴더의 `plugins`로 복사한다.
-  사용자의 Claude/Codex 등록과 marketplace는 건드리지 않는다.
-- `bench/Test-Mcp.ps1`: 실제 공식 SDK와 격리 fixture로 시험. 참고 프로젝트의 설치된 SDK를
-  읽기 전용으로 이용하며 `RC_MCP_SDK`로 위치를 바꿀 수 있다. 살아 있는 서비스/설정을 수정하지 않는다.
-- 웹 GPT에 ZIP을 올리는 것만으로 사설 IP에 접속할 수 있다고 안내하지 않는다.
-  LAN ZIP은 로컬 stdio용, WebPlugin ZIP은 개통된 HTTPS MCP용이다. [사용법](docs/mcp-lan.md).
+- `McpHost.cs`는 HTTPS 중계 전용 localhost 처리기다. 파일·전송·명령 권한과 인증 검증은 유지한다.
+- `McpTools.cs`, `McpProcesses.cs`의 작업공간은 기본 위치이며 접근 제한이 아니다. 작업당 1시간, 동시 8개, 출력 최근 128Ki 문자와 Job Object 자식 정리를 유지한다.
+- `빌드_setup.ps1`은 본체와 WebMCP를 포장한다. 모든 배포물은 dist에만 둔다.
+- `bench/Test-Mcp.ps1`은 격리 설정으로 실제 Web MCP 도구를 검증하며 운영 설정/서비스를 변경하지 않는다.
 
 웹브라우저만으로 이 PC 를 보고 조작하는 프로그램. 받는 쪽은 아무것도 설치하지 않는다.
 만드는 이야기가 아니라 **이미 동작하는 물건**이다. 아래는 그 구조와, 만들면서 실제로
@@ -900,3 +910,5 @@ v1.6.3에서 복잡한 4K 합성 화면을 다시 재니 기존 타일 준비·�
 그 사고를 주석에 남긴다 — 다음 사람이 같은 곳에서 넘어지지 않도록.
 
 되돌리기 어려운 일(서비스 설치, 키 폐기, 파일 삭제)은 하기 전에 확인받는다.
+
+

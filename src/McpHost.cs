@@ -1,4 +1,4 @@
-﻿// 전용 LAN 포트만 사용한다. 브라우저/터널 포트로 /mcp를 중계하지 않는다.
+// HTTPS/OAuth 웹 중계가 호출하는 내부 처리기. 외부 NIC에는 바인딩하지 않는다.
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -39,8 +39,8 @@ namespace RemoteControl
                     if(want==Port)return;
                     if(listener!=null)listener.Stop(); listener=null; Port=0;
                     if(want==0) { Note="MCP 꺼짐";return; }
-                    var accept=new TcpListener(IPAddress.Any,want); accept.Start(); Interop.MakeHandleNonInheritable(accept.Server.Handle);
-                    listener=accept; Port=want; Note="MCP 대기 중 · 포트 "+want;
+                    var accept=new TcpListener(IPAddress.Loopback,want); accept.ExclusiveAddressUse=true; accept.Start(); Interop.MakeHandleNonInheritable(accept.Server.Handle);
+                    listener=accept; Port=want; Note="Web MCP 내부 처리 준비 · 포트 "+want;
                     var thread=new Thread(delegate(){ Accept(accept); }){IsBackground=true};thread.Start();
                     log(Note);
                 } catch(Exception ex) { Note="MCP 시작 실패: "+ex.Message; }
@@ -60,14 +60,14 @@ namespace RemoteControl
             Interop.MakeHandleNonInheritable(client.Client.Handle);client.NoDelay=true;
             NetworkStream stream=client.GetStream();stream.ReadTimeout=30000;stream.WriteTimeout=30000;
             McpOptions options=settings(); var peer=((IPEndPoint)client.Client.RemoteEndPoint).Address;
-            if(!options.Enabled||!options.Accepts(peer)) {Reply(stream,"403 Forbidden",new{error="MCP 사용 또는 허용 IP 설정을 확인하세요."});return;}
+            if(!options.Enabled||!IPAddress.IsLoopback(peer)) {Reply(stream,"403 Forbidden",new{error="Web MCP 사용 설정을 확인하세요."});return;}
             byte[] prefix; string header=Server.ReadHead(stream,out prefix); if(string.IsNullOrEmpty(header))return;
             string[] lines=header.Split(new[]{"\r\n"},StringSplitOptions.None), request=lines[0].Split(' ');
             if(request.Length!=3){Reply(stream,"400 Bad Request",new{error="Invalid HTTP request"});return;}
             string method=request[0],target=request[1],path=target.Split('?')[0];
-            // 브라우저 출처 및 외부 프록시를 통한 호출은 받지 않는다. 로컬 stdio 연결기가 직접 접속한다.
+            // 내부 HTTPS/OAuth 게이트웨이만 직접 접속한다.
             if(!string.IsNullOrEmpty(Server.Header(lines,"Origin"))||!string.IsNullOrEmpty(Server.Header(lines,"X-Forwarded-For"))||!string.IsNullOrEmpty(Server.Header(lines,"Forwarded")))
-            {Reply(stream,"403 Forbidden",new{error="MCP는 LLM PC에서 전용 LAN 주소로 직접 연결하세요."});return;}
+            {Reply(stream,"403 Forbidden",new{error="Web MCP HTTPS 주소로 연결하세요."});return;}
             if(!string.IsNullOrEmpty(Server.Header(lines,"Transfer-Encoding"))) {Reply(stream,"400 Bad Request",new{error="Content-Length required"});return;}
             long length=0; string lengthText=Server.Header(lines,"Content-Length");
             if(!string.IsNullOrEmpty(lengthText)&&(!long.TryParse(lengthText,out length)||length<0)) {Reply(stream,"400 Bad Request",new{error="Invalid length"});return;}
@@ -86,14 +86,8 @@ namespace RemoteControl
             string token=Cookie(Server.Header(lines,"Cookie"),"rcmcpid"); Session authenticated=sessions.Find(token,options.CredentialStamp);
             if(authenticated==null||authenticated.Ip!=ip){Reply(stream,"401 Unauthorized",new{error="Remote ID/PW 로그인이 필요합니다."});return;}
             if(path=="/logout"&&method=="POST"){sessions.Drop(token,options.CredentialStamp);Reply(stream,"200 OK",new{ok=true});return;}
-            if(path=="/upload"&&method=="POST") {Upload(stream,prefix,length,target,options);return;}
             if(path=="/transfer-download"&&method=="GET")
             {try{tools.Transfers.SendDownload(stream,Query(target,"id"),token,options,Server.Header(lines,"Range"));}catch(Exception ex){Reply(stream,"400 Bad Request",new{error=ex.Message});}return;}
-            if(path=="/download"&&method=="GET")
-            {
-                try { string file=McpPath.Check(Query(target,"path"));Files.Send(stream,lines,file,false); }
-                catch(Exception ex){Reply(stream,"400 Bad Request",new{error=ex.Message});}return;
-            }
             if(path!="/mcp"){Reply(stream,"404 Not Found",new{error="Not found"});return;}
             if(method=="GET"||method=="DELETE"){Reply(stream,"405 Method Not Allowed",new{error="Stateless MCP: use POST"},"Allow: POST\r\n");return;}
             if(method!="POST"){Reply(stream,"405 Method Not Allowed",new{error="Use POST"});return;}
@@ -110,7 +104,7 @@ namespace RemoteControl
             {
                 case "initialize":
                     string protocol=Json.Str(args,"protocolVersion");if(Array.IndexOf(new[]{"2025-11-25","2025-06-18","2025-03-26","2024-11-05"},protocol)<0)protocol="2025-11-25";
-                    response=McpJson.Result(id,new{protocolVersion=protocol,capabilities=new{tools=new{listChanged=false}},serverInfo=new{name="RemoteControl LAN",version=MainForm.Version},instructions="Use pc_get_status to verify the remote hostname before changes. File paths are on the remote PC. Workspace directories are default working locations, not access restrictions. Any absolute local path may be used subject to the remote Windows account permissions and path validation. Never infer permission denial from a path being outside a workspace; check the actual tool response. NOT_FOUND and INVALID_ARGUMENT do not mean ACCESS_DENIED. File and folder transfers use pc_begin_upload, pc_write_upload_chunk, pc_finish_upload, pc_prepare_download and pc_read_download_chunk with SHA-256 validation. Commands run with the remote agent's Windows rights. Keep output concise; use logs and screenshot to verify a deployment."});break;
+                    response=McpJson.Result(id,new{protocolVersion=protocol,capabilities=new{tools=new{listChanged=false}},serverInfo=new{name="RemoteControl Web backend",version=MainForm.Version},instructions="Use pc_get_status to verify the remote hostname before changes. File paths are on the remote PC. Workspace directories are default working locations, not access restrictions. Any absolute local path may be used subject to the remote Windows account permissions and path validation. Never infer permission denial from a path being outside a workspace; check the actual tool response. NOT_FOUND and INVALID_ARGUMENT do not mean ACCESS_DENIED. File and folder transfers use pc_begin_upload, pc_write_upload_chunk, pc_finish_upload, pc_prepare_download and pc_read_download_chunk with SHA-256 validation. Commands run with the remote agent's Windows rights. Keep output concise; use logs and screenshot to verify a deployment."+McpBridge.Instructions});break;
                 case "ping":response=McpJson.Result(id,new{});break;
                 case "tools/list":response=McpJson.Result(id,new{tools=McpTools.List()});break;
                 case "resources/list":response=McpJson.Result(id,new{resources=new object[0]});break;
@@ -125,23 +119,23 @@ namespace RemoteControl
             }
             Reply(stream,"200 OK",response);
         }
-        private static void Upload(NetworkStream stream,byte[] prefix,long length,string target,McpOptions options)
+        internal object BridgeCall(Dictionary<string,object> request,Session session)
         {
-            string temp=null;
-            try {
-                if(length>4L*1024*1024*1024)throw new IOException("업로드는 4GiB까지입니다.");
-                string path=McpPath.Check(Query(target,"path")),expected=Query(target,"expected_sha256"),sha=Query(target,"sha256");
-                if(!System.Text.RegularExpressions.Regex.IsMatch(sha,"^[a-fA-F0-9]{64}$"))throw new ArgumentException("업로드 SHA-256이 필요합니다.");
-                McpTools.CheckHash(path,expected);temp=path+".mcp-upload-"+Guid.NewGuid().ToString("N")+".tmp";
-                using(var file=new FileStream(temp,FileMode.CreateNew,FileAccess.Write,FileShare.None,256*1024))
-                {
-                    int pre=(int)Math.Min(length,prefix.Length);file.Write(prefix,0,pre);long left=length-pre;byte[] buffer=new byte[256*1024];
-                    while(left>0){int n=stream.Read(buffer,0,(int)Math.Min(buffer.Length,left));if(n<=0)throw new EndOfStreamException("업로드가 중간에 끊겼습니다.");file.Write(buffer,0,n);left-=n;}
-                }
-                if(!string.Equals(McpTools.FileHash(temp),sha,StringComparison.OrdinalIgnoreCase))throw new IOException("업로드 SHA-256이 일치하지 않습니다.");
-                McpTools.Commit(temp,path,expected,options);temp=null;Reply(stream,"200 OK",McpTools.Info(path));
-            }catch(Exception ex){Reply(stream,"400 Bad Request",new{error=ex.Message});}
-            finally{if(temp!=null)try{File.Delete(temp);}catch{}}
+            Sync();McpOptions options=settings();
+            if(stopped||!options.Enabled)throw new McpCapabilityDisabledException("하위 PC의 MCP 사용 설정이 꺼져 있습니다.");
+            if(Auth.Find(session.Token)!=session)throw new UnauthorizedAccessException("하위 PC 로그인이 만료되었습니다.");
+            string owner=McpTools.Required(request,"owner");
+            if(!System.Text.RegularExpressions.Regex.IsMatch(owner,@"\A[0-9a-f]{64}\z"))throw new ArgumentException("잘못된 중계 소유자입니다.");
+            string operation=Json.Str(request,"operation");
+            if(operation=="list")return McpJson.Text(new{hostname=Environment.MachineName,version=MainForm.Version,tools=McpTools.List(false)});
+            if(operation!="call")throw new ArgumentException("지원하지 않는 중계 요청입니다.");
+            string name=McpTools.Required(request,"tool");McpBridge.CheckTool(name,options);
+            if(name!="pc_get_status"&&!string.Equals(McpTools.Required(request,"expected_hostname"),Environment.MachineName,StringComparison.OrdinalIgnoreCase))
+                throw new McpBridgeException("BRIDGE_HOSTNAME_MISMATCH","하위 PC 이름이 확인한 대상과 다릅니다. 실행하지 않았습니다.");
+            string isolatedOwner="bridge-"+McpTools.Hash(Encoding.UTF8.GetBytes(McpJson.Write(new{owner,user=session.User,stamp=options.CredentialStamp})));
+            var clock=System.Diagnostics.Stopwatch.StartNew();bool success=false;
+            try {object result=tools.Call(name,McpJson.Obj(request,"arguments"),options,isolatedOwner,isolatedOwner);success=true;return result;}
+            finally {log("MCP bridge "+McpJson.Write(new{tool=name,user=session.User,ok=success,ms=clock.ElapsedMilliseconds}));}
         }
         private static byte[] Read(NetworkStream stream,byte[] prefix,long length,int max)
         {
@@ -161,3 +155,5 @@ namespace RemoteControl
         }
     }
 }
+
+

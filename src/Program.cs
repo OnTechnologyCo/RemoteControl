@@ -1,4 +1,4 @@
-﻿// 원격제어 - 본체.
+// 원격제어 - 본체.
 
 //
 
@@ -117,16 +117,6 @@ namespace RemoteControl
                     Native.MakeDpiAware(); Application.EnableVisualStyles();
                     Application.Run(new MainForm(false)); return 0;
 
-                case "--mcp-client":
-
-                    return McpClient.Run(args);
-
-                case "--mcp-config":
-
-                    Native.MakeDpiAware(); Application.EnableVisualStyles();
-
-                    Application.Run(new McpClientForm()); return 0;
-
                 case "--mcp-job":
 
                     return McpJobRunner.Run(args);
@@ -216,6 +206,8 @@ namespace RemoteControl
             }
 
 
+
+            if (mode.Length != 0 && mode != "--tray") return 64;
 
             if (RemoteControlSecrets.ConfigProtection.IsAdministrator) Config.EnsureWritable();
             else if (!ServiceHost.IsRunning())
@@ -316,13 +308,16 @@ namespace RemoteControl
 
         /// <summary>이 프로그램의 판 번호. 창 제목과 머리글에 보인다.</summary>
 
-        internal const string Version = "1.9.6";
+        internal const string Version = "1.9.7";
 
 
 
         internal MainForm(bool toTray)
 
         {
+
+            svcMode = ServiceHost.IsRunning();
+            if (!svcMode) server.StartMcp();
 
             Text = "원격제어 v" + Version;
 
@@ -357,10 +352,6 @@ namespace RemoteControl
 
 
             if (RemoteControlSecrets.ConfigProtection.IsAdministrator) Tunnel.EnsureMachineKey();
-
-            svcMode = ServiceHost.IsRunning();
-
-
 
             if (svcMode)
 
@@ -908,7 +899,7 @@ namespace RemoteControl
 
             // ---- 외부망 ----
 
-            var mcpLink = new LinkLabel { Text = "LLM / MCP 설정 · LAN 및 웹 ChatGPT / Claude 연결", Location = new Point(14,132), Size = new Size(490,20), Font = fS, LinkColor = Color.FromArgb(34,211,238) };
+            var mcpLink = new LinkLabel { Text = "Web MCP 설정 · HTTPS / OAuth 연결", Location = new Point(14,132), Size = new Size(490,20), Font = fS, LinkColor = Color.FromArgb(34,211,238) };
             mcpLink.LinkClicked += delegate { if (!RequireAdminSettings()) return; using(var form=new McpForm(delegate {
 
                 if(!svcMode)return server.McpNote;
@@ -2176,7 +2167,7 @@ namespace RemoteControl
 
 
 
-            if (!svcMode) EnableTunnelGuard();
+            server.StartMcp();
 
             if (server.Start(Config.Port, true))
 
@@ -2197,6 +2188,8 @@ namespace RemoteControl
                 Log("포트를 열지 못했습니다: " + server.LastError);
 
             }
+
+            if (!svcMode) EnableTunnelGuard();
 
         }
 
@@ -2753,4 +2746,5 @@ namespace RemoteControl
     }
 
 }
+
 

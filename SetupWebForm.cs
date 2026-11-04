@@ -34,7 +34,7 @@ namespace RemoteControlSetup
             if (optional) row(new Control[] {enabled});
             row(new Control[] {new Label {Text=optional
                 ? "선택하지 않아도 설치됩니다. 설치 후 [LLM / MCP 설정] → [웹 ChatGPT / Claude 설정]에서 설정할 수 있습니다. 기존 웹 연결은 유지됩니다."
-                : "원격제어 ID·비밀번호, 잠금 화면 제어 서비스, LAN MCP를 먼저 켜고 저장하세요. 공개 HTTPS 주소와 기본 포트(443) 또는 전용 포트를 선택하세요.",
+                : "원격제어 ID·비밀번호와 잠금 화면 제어 서비스를 먼저 설정하세요. 공개 HTTPS 주소와 기본 포트(443) 또는 전용 포트를 선택하세요.",
                 Font=Ui.F(8,FontStyle.Regular), ForeColor=Ui.Sub}});
             string saved = WebMcp.ReadSetting("mcp_web_url", ""); Uri uri;
             if(WebMcp.ReadSetting("mcp_web_mode","")=="tailscale"||WebMcp.ReadSetting("mcp_web_mode","")=="private")saved=WebMcp.ReadSetting("mcp_ddns_url","");
@@ -176,3 +176,4 @@ namespace RemoteControlSetup
         }
     }
 }
+

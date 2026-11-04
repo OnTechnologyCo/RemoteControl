@@ -1,4 +1,4 @@
-﻿// 원격제어 설치 관리자. 한 파일로 끝난다 (본체를 안에 넣고 다닌다).
+// 원격제어 설치 관리자. 한 파일로 끝난다 (본체를 안에 넣고 다닌다).
 
 //
 
@@ -82,7 +82,7 @@ namespace RemoteControlSetup
 
         internal const string Product = "원격제어";
 
-        internal const string Version = "1.9.6";
+        internal const string Version = "1.9.7";
 
         internal const string ExeName = "RemoteControl.exe";
 

@@ -184,18 +184,22 @@ namespace RemoteControl
 
         /// <summary>하위 PC 에 대신 로그인해 세션 토큰을 받아 온다. 실패하면 "" 와 이유.</summary>
         private static string Login(Peer p, string userIp, out string why)
+        { string errorCode; return Login(p, userIp, out why, out errorCode); }
+
+        internal static string Login(Peer p, string userIp, out string why, out string errorCode)
         {
-            why = "";
+            why = ""; errorCode = "BRIDGE_UNAVAILABLE";
 
             string pass = GetPassword(p.Id);
             if (string.IsNullOrEmpty(pass))
             {
+                errorCode = "BRIDGE_CREDENTIALS_MISSING";
                 why = "저장된 비밀번호가 없습니다. [하위 PC] 창에서 다시 넣어 주세요.";
                 return "";
             }
 
             TcpClient c = Dial(p.Host, p.Port, 5000, out why);
-            if (c == null) return "";
+            if (c == null) { errorCode = "BRIDGE_OFFLINE"; return ""; }
 
             using (c)
             {
@@ -224,18 +228,22 @@ namespace RemoteControl
                     string resp = ReadHead(s, out rest);
 
                     string tok = Cookie(resp);
-                    if (!string.IsNullOrEmpty(tok)) return tok;
+                    if (!string.IsNullOrEmpty(tok)) { errorCode = ""; return tok; }
 
                     // 왜 안 됐는지는 돌려받은 화면에 적혀 있다. 그대로 사람에게 옮긴다.
                     // 원격에서는 하위 PC 의 기록을 볼 수 없으니 여기서 못 알려 주면 끝이다.
                     string page = ReadRest(s, rest, 16384);
 
-                    if (page.IndexOf("시도가 너무 많습니다", StringComparison.Ordinal) >= 0)
+                    if (page.IndexOf("시도가 너무 많습니다", StringComparison.Ordinal) >= 0) {
+                        errorCode = "BRIDGE_AUTH_LOCKED";
                         why = p.Addr + " 가 로그인 시도를 잠시 막고 있습니다. 몇 분 뒤에 다시 해 보세요.";
-                    else if (page.IndexOf("맞지 않습니다", StringComparison.Ordinal) >= 0)
+                    } else if (page.IndexOf("맞지 않습니다", StringComparison.Ordinal) >= 0) {
+                        errorCode = "BRIDGE_LOGIN_FAILED";
                         why = p.Addr + " 의 아이디 또는 비밀번호가 맞지 않습니다.";
-                    else if (resp.IndexOf(" 404 ", StringComparison.Ordinal) >= 0)
+                    } else if (resp.IndexOf(" 404 ", StringComparison.Ordinal) >= 0) {
+                        errorCode = "BRIDGE_UNSUPPORTED";
                         why = p.Addr + " 는 원격제어가 아닙니다.";
+                    }
                     else
                         why = p.Addr + " 에 로그인하지 못했습니다.";
 
@@ -243,6 +251,7 @@ namespace RemoteControl
                 }
                 catch (Exception ex)
                 {
+                    errorCode = "BRIDGE_OFFLINE";
                     why = p.Addr + " 와 이야기하지 못했습니다 (" + ex.Message + ")";
                     return "";
                 }
@@ -736,7 +745,7 @@ namespace RemoteControl
         /// TcpClient.Connect 를 그냥 쓰면 꺼져 있는 PC 에 20초 넘게 매달린다.
         /// 그동안 브라우저 쪽은 아무 말도 못 듣고 기다리게 된다.
         /// </summary>
-        private static TcpClient Dial(string host, int port, int ms, out string why)
+        internal static TcpClient Dial(string host, int port, int ms, out string why)
         {
             why = "";
             TcpClient c = new TcpClient();

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -13,6 +13,7 @@ namespace RemoteControl
 {
     internal sealed class McpTools : IDisposable
     {
+        private readonly McpBridge bridge = new McpBridge();
         private readonly McpProcesses processes = new McpProcesses();
         internal readonly McpTransfers Transfers;
         internal McpTools(string transferDirectory = null) { Transfers = new McpTransfers(transferDirectory); }
@@ -26,10 +27,10 @@ namespace RemoteControl
             return new { name = "pc_" + name, description = description, inputSchema = new { type = "object", properties = properties, required = required, additionalProperties = false },
                 annotations = new { readOnlyHint = read, destructiveHint = !read, idempotentHint = read, openWorldHint = !read } };
         }
-        internal static object[] List()
+        internal static object[] List(bool includeBridge = true)
         {
             var none = new string[0];
-            return new[] {
+            var result = new List<object> {
                 Tool("get_status", "Verify the target PC hostname, execution identity and enabled MCP settings before changes. workspace_directories are default locations, not access boundaries; paths outside them are supported under the Windows account permissions.", true, none),
                 Tool("list_directory", "List a bounded page at any absolute local directory on the remote PC. Configured workspaces do not restrict access.", true, new[]{"path"}, "path",Str("Absolute remote Windows folder"),"offset",Num("Zero-based entry offset"),"limit",Num("1..500, default 100")),
                 Tool("get_file_info", "Read file metadata and SHA-256 for deployment verification.", true, new[]{"path"}, "path",Str("Absolute remote file")),
@@ -54,9 +55,17 @@ namespace RemoteControl
                 Tool("prepare_download", "Prepare a binary file or folder ZIP for streamed or chunked download. Folder preparation is asynchronous; poll transfer status.",false,new[]{"path","kind"},"path",Str("Remote file or folder"),"kind",Str("file or folder")),
                 Tool("read_download_chunk", "Read up to 256KiB of a prepared file or folder ZIP. Verify chunk and complete SHA-256 when saving the bytes.",true,new[]{"transfer_id"},"transfer_id",Str("Prepared download ID"),"offset",Num("Byte offset"),"limit",Num("1..262144, default 262144"))
             };
+            if(includeBridge)result.AddRange(new[] {
+                Tool("list_bridge_pcs", "List registered child PCs and their target_revision. Does not connect or change the active local target.",true,none),
+                Tool("bridge_list_tools", "Read the selected child PC's MCP tools. Both PCs must support bridge MCP. Use the exact ID and revision from pc_list_bridge_pcs.",true,new[]{"bridge_id","target_revision"},"bridge_id",Num("Registered child PC ID"),"target_revision",Str("Exact revision from pc_list_bridge_pcs")),
+                Tool("bridge_call", "Call a native MCP tool on ONE registered child PC. First call pc_get_status with this tool, then pass the verified expected_hostname for every subsequent call. Keep target ID/revision with all job and transfer IDs. Never falls back to this PC or automatically replays requests.",false,new[]{"bridge_id","target_revision","tool_name"},"bridge_id",Num("Registered child PC ID"),"target_revision",Str("Exact revision from pc_list_bridge_pcs"),"tool_name",Str("Native child MCP tool name, e.g. pc_get_status"),"arguments",new{type="object",description="Arguments matching the child tool schema",additionalProperties=true},"expected_hostname",Str("Verified child hostname; required except for pc_get_status"))
+            });
+            return result.ToArray();
         }
         internal object Call(string name, Dictionary<string, object> a, McpOptions options, string user, string token = null)
         {
+            if(name=="pc_list_bridge_pcs")return McpBridge.List();
+            if(name=="pc_bridge_list_tools"||name=="pc_bridge_call")return bridge.Call(name,a,options,user,token);
             if(name=="pc_begin_upload"||name=="pc_write_upload_chunk"||name=="pc_finish_upload"||name=="pc_get_transfer_status"||name=="pc_cancel_transfer"||name=="pc_prepare_download"||name=="pc_read_download_chunk")return McpJson.Text(Transfers.Call(name,a,options,token));
             string path;
             switch (name)
@@ -66,7 +75,7 @@ namespace RemoteControl
                     workspace_directories = options.Workspaces, default_working_directory = options.Workspaces[0],
                     workspaces_restrict_access = false, filesystem_access = "all_local_paths_with_windows_account_permissions",
                     path_requirements = "absolute_local_windows_paths; file_tools_do_not_follow_junctions_or_symlinks",
-                    access_note = "Workspace directories are default locations, not access restrictions. Do not report permission denial without an actual access-denied response. Missing files, invalid paths and disabled capabilities are different errors.", allow_commands = options.AllowCommands, allow_screen = options.AllowScreen, mcp_port = options.Port });
+                    access_note = "Workspace directories are default locations, not access restrictions. Do not report permission denial without an actual access-denied response. Missing files, invalid paths and disabled capabilities are different errors.", allow_commands = options.AllowCommands, allow_screen = options.AllowScreen, mcp_transport = "https-oauth", backend_loopback_only = true });
                 case "pc_list_directory":
                     path = McpPath.Check(Required(a,"path"));
                     var entries = new DirectoryInfo(path).GetFileSystemInfos(); Array.Sort(entries, delegate(FileSystemInfo x, FileSystemInfo y) { return StringComparer.OrdinalIgnoreCase.Compare(x.Name,y.Name); });
@@ -166,3 +175,5 @@ namespace RemoteControl
         public void Dispose() { processes.Dispose(); }
     }
 }
+
+

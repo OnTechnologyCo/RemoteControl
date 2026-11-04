@@ -1,4 +1,4 @@
-﻿# 사용법: 빌드_setup.ps1                       본체 + 설치 파일, 항상 dist에 생성
+# 사용법: 빌드_setup.ps1                       본체 + 설치 파일, 항상 dist에 생성
 #         빌드_setup.ps1 -IncludeTailscaleKey   기존 Tailscale 키·알림 설정 포함
 #         빌드_setup.ps1 -NoKey                기본 동작과 같음 (기존 명령 호환)
 [CmdletBinding()]
@@ -29,7 +29,6 @@ Assert-VddPayload (Join-Path $root 'vdd') $pins.vdd
 # 오래된 exe를 포장하는 일을 막기 위해 setup을 만들 때 항상 현재 소스부터 빌드한다.
 & (Join-Path $root '빌드_tsproxy.ps1')
 & (Join-Path $root '빌드.ps1')
-& (Join-Path $root '빌드_mcp.ps1')
 & (Join-Path $root '빌드_webmcp.ps1')
 
 # 설치 창에 표시하는 버전과 실제로 담는 본체 버전이 다르면 배포하지 않는다.
@@ -180,8 +179,6 @@ $args = @(
     "/unsafe-"
     "/resource:" + $app + ",RemoteControl.exe"
     "/resource:" + $ico + ",remotecontrol.ico"
-    "/resource:" + (Join-Path $buildDir 'RemoteControl_MCP.zip') + ",RemoteControl_MCP.zip"
-    "/resource:" + (Join-Path $buildDir 'RemoteControl_Claude.mcpb') + ",RemoteControl_Claude.mcpb"
     "/resource:" + (Join-Path $buildDir 'RemoteControl_WebMCP.zip') + ",RemoteControl_WebMCP.zip"
     (Join-Path $root "Setup.cs")
     (Join-Path $root "src\TelegramCredentials.cs")
@@ -218,3 +215,4 @@ $fi = Get-Item $out
 
 # 배포물을 만든 소스와 포함된 바이너리를 해시로 연결한다. 설치나 서비스 재시작은 하지 않는다.
 & (Join-Path $root 'build\Write-BuildManifest.ps1') -Root $root -InnoCompiler $iscc
+

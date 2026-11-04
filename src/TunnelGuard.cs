@@ -65,6 +65,7 @@ namespace RemoteControl
         private static Action<string> say;
 
         private static readonly object gate = new object();
+        private static readonly AutoResetEvent wake = new AutoResetEvent(false);
 
         /// <summary>지금 왜 이 상태인지 한 줄. 비어 있으면 정상이다.</summary>
         internal static string Note { get { return note ?? ""; } }
@@ -85,6 +86,7 @@ namespace RemoteControl
                 wanted = want;
                 say = log;
                 enabled = true;
+                wake.Set();
 
                 if (started) return;
                 started = true;
@@ -122,7 +124,7 @@ namespace RemoteControl
 
             while (true)
             {
-                Thread.Sleep(TickMs);
+                wake.WaitOne(TickMs);
 
                 try
                 {
@@ -464,3 +466,4 @@ namespace RemoteControl
         }
     }
 }
+
