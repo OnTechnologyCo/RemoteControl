@@ -24,7 +24,7 @@
 - 작업공간 폴더는 기본 작업 위치이며 접근 제한이 아니다. Windows 실행 계정 권한이 실제 접근 기준이다.
 - 비밀번호, Telegram 토큰, SSH 키는 전송이나 공개 설치 파일에 포함하지 않는다.
 - 브라우저는 파일 전체를 메모리에 적재하지 않고 2MiB 조각만 SHA-256 계산한다. 서버는 디스크 임시 저장소 사용.
-- Web Crypto API가 필요하므로 HTTPS 또는 localhost 신뢰 컨텍스트에서 대용량 업로드가 동작한다. 미지원 브라우저에는 오류를 표시한다.
+- v1.9.8부터 일반 HTTP에서도 공유 JavaScript SHA-256으로 대용량 업로드를 검증한다. Web Crypto가 있으면 우선 사용하며, 2MiB 조각/64KiB 처리 단위로 메모리와 화면 이벤트 처리를 유지한다. 상세: http-upload-198.md.
 - 설치된 서비스와 실제 파일 시스템에서 외부 터널을 통과하는 실기 검증은 별도로 수행해야 한다.
 
 ## 검증
@@ -33,8 +33,8 @@
 - bench/ViewerUploadTest.js: 기존 브라우저 업로드 큐·폴더 처리 10건 통과.
 - bench/UploadChunkViewerTest.js: Web Crypto/XHR 모의 브라우저에서 조각 응답 유실 후 자동 복구 및 4MiB 지점부터 재개 2건 통과.
 - bench/UploadTest.cs: multipart 경계, 조기 연결 해제, 안전한 파일명 테스트.
-- bench/UploadIntegrationTest.js: Edge 브라우저 선택 검사는 SYSTEM 계정에서 디버깅 포트가 열리지 않아 현장 테스트 보류. 대화형 Windows 사용자에서 검증 필요.
-- bench/Test-Upload.ps1: SYSTEM에서 Edge GUI 테스트는 명시적으로 건너뛰고, HTTP 및 JavaScript 큐 검증은 실행한다.
+- bench/UploadIntegrationTest.js: v1.9.8부터 검증된 Chrome 실행 도우미와 비보안 HTTP origin을 사용해 실제 파일 선택·폴더·130MiB 업로드 및 응답 유실 복구를 검사한다.
+- bench/Test-Upload.ps1: multipart, JavaScript 큐·해시, HTTP 및 Chrome 통합 검증을 실행한다. 브라우저 검증이 실행되지 않으면 통과로 보고하지 않는다.
 
 ## 현장 확인
 

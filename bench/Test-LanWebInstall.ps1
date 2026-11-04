@@ -12,7 +12,7 @@ foreach($file in Get-ChildItem -LiteralPath (Join-Path $root 'web-mcp') -Filter 
     [IO.File]::WriteAllText((Join-Path $package $file.Name),$text,$utf8)
 }
 foreach($name in @('node.exe','caddy.exe','node_modules','THIRD-PARTY.txt','NODE-LICENSE.txt','CADDY-LICENSE.txt')){Copy-Item -LiteralPath (Join-Path $root ('dist\web-mcp\'+$name)) -Destination $package -Recurse}
-foreach($name in @('server.mjs','gateway.mjs','auth-state.mjs','transfers.mjs','transfer-client.mjs','package.json','package-lock.json','README.md')){Copy-Item -LiteralPath (Join-Path $root ('web-mcp\'+$name)) -Destination $package}
+foreach($name in @('server.mjs','gateway.mjs','auth-state.mjs','transfers.mjs','transfer-client.mjs','sha256.mjs','package.json','package-lock.json','README.md')){Copy-Item -LiteralPath (Join-Path $root ('web-mcp\'+$name)) -Destination $package}
 $global:LanFixtureTasks=@{};$global:LanFixtureProcesses=@{};$global:LanFixtureRule=$null;$global:LanFixturePublicService=$null
 function Get-ScheduledTask {param($TaskName,$ErrorAction) if($global:LanFixtureTasks.ContainsKey($TaskName)){$global:LanFixtureTasks[$TaskName]}}
 function Register-ScheduledTask {param($TaskName,$Action,$Principal,$Settings,$Trigger,$Description,[switch]$Force) $global:LanFixtureTasks[$TaskName]=[PSCustomObject]@{Actions=@($Action);Principal=$Principal}}

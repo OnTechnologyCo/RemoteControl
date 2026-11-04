@@ -16,15 +16,10 @@ if ($LASTEXITCODE -ne 0) { throw 'Multipart test compilation failed' }
 if ($LASTEXITCODE -ne 0) { throw 'Multipart tests failed' }
 & node (Join-Path $PSScriptRoot 'ViewerUploadTest.js')
 if ($LASTEXITCODE -ne 0) { throw 'Upload queue tests failed' }
-& node (Join-Path $PSScriptRoot 'UploadChunkViewerTest.js')
+& node --experimental-vm-modules (Join-Path $PSScriptRoot 'UploadChunkViewerTest.js')
 if ($LASTEXITCODE -ne 0) { throw 'Chunk viewer resume/retry tests failed' }
 & node (Join-Path $PSScriptRoot 'UploadChunkHttpTest.js')
 if ($LASTEXITCODE -ne 0) { throw '130MiB chunk HTTP integrity/recovery tests failed' }
-# Chromium headless debugging is unavailable in the SYSTEM service account.
-# Do not report that UI integration passed without actually running it.
-if ([Security.Principal.WindowsIdentity]::GetCurrent().IsSystem) {
-    'SKIP Edge GUI integration: run UploadIntegrationTest.js in an interactive Windows session.'
-} else {
-    & node (Join-Path $PSScriptRoot 'UploadIntegrationTest.js')
-    if ($LASTEXITCODE -ne 0) { throw 'Upload browser integration tests failed' }
-}
+# Uses the tested Chrome helper, including SYSTEM, on an insecure HTTP origin.
+& node (Join-Path $PSScriptRoot 'UploadIntegrationTest.js')
+if ($LASTEXITCODE -ne 0) { throw 'Upload HTTP browser integration tests failed' }

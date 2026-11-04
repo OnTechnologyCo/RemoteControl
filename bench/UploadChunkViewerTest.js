@@ -1,7 +1,8 @@
-// Browser-side chunk upload logic in Node VM with mocked XHR and actual WebCrypto.
+// Browser-side chunks with native WebCrypto, HTTP fallback and failed native digest.
 // No browser, PC service, network or production files are touched.
 'use strict';
 const fs=require('fs'),path=require('path'),vm=require('vm'),assert=require('assert'),crypto=require('crypto');
+const {pathToFileURL}=require('node:url');
 const source=fs.readFileSync(path.join(__dirname,'../web/upload-chunks.js'),'utf8');
 let requests=[], completed=[], errors=[], responseLost=false;
 const sessions=new Map(), store=new Map();
@@ -56,11 +57,13 @@ class MockXHR {
     }).catch(error=>{me.status=0;setTimeout(()=>{if(me.onerror)me.onerror(error);},1);});
   }
 }
+let ctx,imports=0,yields=0;
+function context(cryptoApi){
 const ctx={
-  window:{crypto:crypto.webcrypto},crypto:crypto.webcrypto,
+  window:{crypto:cryptoApi},crypto:cryptoApi,
   Blob,FormData,Uint8Array,Number,Promise,
   XMLHttpRequest:MockXHR,localStorage:storage,
-  setTimeout,clearTimeout,console,
+  setTimeout:(fn,ms)=>{if(ms===0)yields++;return setTimeout(fn,ms);},clearTimeout,console,
   uploadJob:null,fsProg:{firstChild:{style:{}}},
   q:(o,pc)=>new URLSearchParams({...o,pc}).toString(),
   bytes:n=>String(n),uploadStatus:()=>{},
@@ -69,7 +72,12 @@ const ctx={
   uploadNext:(job)=>{completed.push(job);},
 };
 vm.createContext(ctx);
-vm.runInContext(source,ctx,{filename:'upload-chunks.js'});
+vm.runInContext(source,ctx,{filename:'upload-chunks.js',importModuleDynamically:async specifier=>{
+ assert.equal(specifier,'/sha256.mjs');imports++;
+ return import(pathToFileURL(path.join(__dirname,'../web-mcp/sha256.mjs')).href);
+}});
+return ctx;
+}
 async function until(fn,timeout=16000){
  const start=Date.now();
  while(Date.now()-start<timeout){if(fn())return;await new Promise(r=>setTimeout(r,30));}
@@ -84,6 +92,24 @@ async function upload(file,dir='D:\\mock'){
  return job;
 }
 (async()=>{
+ for(const [label,cryptoApi,fallback] of [
+ ['Web Crypto',crypto.webcrypto,false],
+ ['HTTP crypto without subtle',{},true],
+ ['no crypto API',undefined,true],
+ ['rejected native digest',{subtle:{digest:()=>Promise.reject(Error('unavailable'))}},true],
+ ['throwing native digest',{subtle:{digest:()=>{throw Error('unavailable');}}},true]
+ ]){
+ ctx=context(cryptoApi);imports=0;yields=0;requests=[];errors=[];completed=[];sessions.clear();store.clear();responseLost=false;
+ for(const size of [0,1,55,56,63,64,65,65535,65536,65537,2*1024*1024]){
+   const data=crypto.randomBytes(size);
+   assert.equal(await ctx.chunkUploadSha256(new Blob([data])),crypto.createHash('sha256').update(data).digest('hex'),label+' SHA size '+size);
+ }
+ const before=imports;
+ await assert.rejects(()=>ctx.chunkUploadSha256({arrayBuffer:()=>Promise.reject(Error('read failed'))}),/read failed/);
+ assert.equal(imports,before,'read failures must not be hidden by fallback');
+ if(fallback){assert(imports>0);assert(yields>=31,'2MiB hashing must yield between 64KiB batches');}
+ else {assert.equal(imports,0);assert.equal(yields,0);}
+ console.log('PASS '+label+' SHA vectors, bounded yielding and read failure');
  const file=Object.assign(new Blob([crypto.randomBytes(12*1024*1024)]),{name:'movie.bin',lastModified:123456});
  const job=await upload(file);
  assert.equal(job.done,1);assert.equal(job.sent,file.size);
@@ -107,5 +133,7 @@ async function upload(file,dir='D:\\mock'){
  assert.equal(requests.filter(x=>x==='chunk').length,4,'remaining four chunks sent');
  assert.equal(store.size,0,'resume key cleaned after completing');
  console.log('PASS reselecting a 12MiB file resumes from confirmed 4MiB offset');
- console.log('ALL 2 CHUNK VIEWER CHECKS PASSED');
+ console.log('PASS '+label+' lost-ack and reselect resume');
+ }
+ console.log('ALL 15 CHUNK VIEWER CHECKS PASSED');
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -32,7 +32,7 @@ try {
 
     $files=@{
 
-        'plugin.json'=(@{'$schema'='https://agent-plugins.org/schemas/1.0.0/plugin.schema.json';name='remotecontrol-web';version='1.9.7';description='Control an authorized RemoteControl PC through HTTPS and OAuth.';author=@{name='ontech'}} | ConvertTo-Json -Depth 8)
+        'plugin.json'=(@{'$schema'='https://agent-plugins.org/schemas/1.0.0/plugin.schema.json';name='remotecontrol-web';version='1.9.8';description='Control an authorized RemoteControl PC through HTTPS and OAuth.';author=@{name='ontech'}} | ConvertTo-Json -Depth 8)
 
         'mcp.json'=(@{'$schema'='https://agent-plugins.org/schemas/1.0.0/mcp.schema.json';mcpServers=@{'remotecontrol-web'=@{type='streamable-http';url=($origin+'/mcp')}}} | ConvertTo-Json -Depth 8)
 
