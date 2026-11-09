@@ -5,9 +5,8 @@
   드라이버는 이 파일을 C:\VirtualDisplayDriver\vdd_settings.xml 에서 읽는다.
   설치할 때 그 자리에 복사한다.
 
-  원본에 있던 2560x1440, 3840x2160 은 뺐다.
-  원격으로 보는 화면이라 그만큼 커 봐야 회선만 먹고 휴대폰에서는 보이지도 않는다.
-  맨 앞에 둔 1920x1080 이 기본으로 잡힌다.
+  3840x2160(4K)을 선택할 수 있다.
+  기존 설치의 기본 해상도를 유지하도록 1920x1080을 맨 앞에 둔다.
 
   주사율도 60 하나만 둔다. 화면이 바뀔 때만 보내는 구조라 높은 주사율이 의미가 없고,
   목록만 길어져 고르기 번거롭다.
@@ -44,6 +43,11 @@
         <resolution>
             <width>1280</width>
             <height>720</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <resolution>
+            <width>3840</width>
+            <height>2160</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
     </resolutions>
