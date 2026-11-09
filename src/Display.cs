@@ -221,8 +221,7 @@ namespace RemoteControl
         }
 
         /// <summary>
-        /// 브라우저에 보여 줄 크기 목록. FHD 를 넘는 것은 뺀다.
-        /// 원격으로 보는 화면이라 그보다 커 봐야 회선만 먹고 잘 보이지도 않는다.
+        /// 브라우저에 보여 줄 크기 목록. 드라이버가 지원하는 4K 이상 모드도 보존한다.
         /// </summary>
         internal static List<Size> Choices()
         {
@@ -231,8 +230,6 @@ namespace RemoteControl
 
             foreach (Size s in ModesCached())
             {
-                if (s.Width > AutoW || s.Height > AutoH) continue;
-
                 seen[s.Width * 100000 + s.Height] = true;
                 r.Add(s);
             }
@@ -243,6 +240,7 @@ namespace RemoteControl
             // 목록에 없다고 미리 빼 버리면 사용자는 시도조차 못 한다.
             // 눌러 보고 안 되면 그때 이유를 알려 주는 편이 낫다.
             Size[] common = {
+                new Size(3840, 2160),
                 new Size(1920, 1080), new Size(1600, 900), new Size(1440, 900),
                 new Size(1366, 768),  new Size(1280, 800), new Size(1280, 720),
                 new Size(1024, 768)
