@@ -810,9 +810,12 @@ namespace RemoteControl
             ScreenSource src = null;
             Thread sender = null;
             bool running = true;
+            bool timerHeld = false;
 
             try
             {
+                // 전송 루프의 짧은 대기가 15.6ms 로 늘어나 스크롤이 25fps 에 묶였다 (TimerResolution.cs).
+                TimerResolution.Acquire(); timerHeld = true;
                 src = new ScreenSource(ScreenBounds(screenIndex));
                 SendInit(ws, src, screenIndex, output);
                 ws.SendText(PrivacyStatusJson(PrivacyScreen.IsActive, true, ""));
@@ -886,7 +889,8 @@ namespace RemoteControl
                                         output.Video.Heartbeat();
                                         if (rtcOp == "ready") { output.Video.Active = true; output.Tiles.Clear(); }
                                         int rate;
-                                        if (int.TryParse(rtcData, out rate)) output.Video.Send("{\"type\":\"rate\",\"Bitrate\":" + Math.Max(500000, Math.Min(12000000, rate)) + "}");
+                                        // 세션 상한(RtcSession.Bitrates)은 helper가 다시 자른다. 여기서는 helper 검증 범위만 지킨다.
+                                        if (int.TryParse(rtcData, out rate)) output.Video.Send("{\"type\":\"rate\",\"Bitrate\":" + Math.Max(500000, Math.Min(RtcSession.BitrateLimit, rate)) + "}");
                                     }
                                     else if (rtcOp == "stop") StopVideo(ws, src, output);
                                 }
@@ -1069,6 +1073,7 @@ namespace RemoteControl
                 if (sender != null) { try { sender.Join(500); } catch { } }
                 if (output.Video != null) output.Video.Dispose();
                 if (src != null) src.Dispose();
+                if (timerHeld) TimerResolution.Release();
 
                 Interlocked.Decrement(ref Viewers);
                 Notify(string.Format("화면 연결 종료 - {0} ({1})", sess.User, ip));
@@ -1169,7 +1174,7 @@ namespace RemoteControl
                     for (int i = 0; i < 16 && output.Video.TryRead(out line); i++)
                     {
                         var signal = Json.Parse(line); string type = Json.Str(signal, "type");
-                        if (type == "answer" || type == "candidate" || type == "encoder")
+                        if (type == "answer" || type == "candidate" || type == "encoder" || type == "bitrate")
                             SendRtc(ws, output.Video.Id, type, Json.Str(signal, "value") ?? "");
                     }
                     if (output.Video.Expired) StopVideo(ws, src, output);
@@ -1180,6 +1185,10 @@ namespace RemoteControl
                 // 준비 중인 화면을 16ms마다 다시 압축하면 4K에서는 남은 타일이 굶는다.
                 // 빠른 망은 먼저 다 보내고, 작은 묶음은 바로 최신 내용으로 바꾼다.
                 // 큰 묶음도 100ms가 지나면 최신 화면으로 교체한다.
+                //
+                // 두 묶음이 나가 있는 동안 다음 화면을 미리 압축하는 방식은 재 보고 넣지 않았다
+                // (bench/Test-LiveView.ps1, 1440p 스크롤). 100Mbps에서 12→16fps로 늘지만
+                // 미리 만든 화면이 창이 열리기를 기다려 지연 p50이 80→109ms로 나빠졌다.
                 if (!videoActive && output.Flow.CanSend && schedule.ShouldCapture(output.Tiles.Count, output.Flow.Budget))
                 {
                     schedule.StartCapture();

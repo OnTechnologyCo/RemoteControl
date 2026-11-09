@@ -54,6 +54,34 @@ namespace RemoteControl
             Run("advfirewall firewall delete rule name=\"" + RuleName + "\"");
         }
 
+        // GPU 영상(WebRTC)은 본체가 아니라 video-helper 가 UDP 로 직접 받는다. 위 프로그램 규칙은
+        // 본체 exe 만 허용하므로, 같은 LAN 의 브라우저가 보내는 ICE 확인 패킷이 막혀 영상이
+        // 붙지 못하고 JPEG 로 되돌아갔다(설치 PC 에 helper 규칙이 하나도 없었다).
+        // Chrome 은 LAN 주소를 mDNS 이름으로 가려 helper 가 먼저 보낼 수도 없다.
+        // helper 는 관리자만 쓸 수 있는 폴더에 해시 이름으로 풀리므로 그 파일 하나만 허용한다.
+        // 판이 바뀌면 이름이 바뀌어 옛 규칙을 지우고 새 경로로 바꾼다. 공용망은 열지 않는다.
+        internal const string VideoRuleName = "원격제어 영상";
+        private static string videoProgram;
+
+        internal static void EnsureVideo(string helperPath)
+        {
+            if (string.IsNullOrEmpty(helperPath)) return;
+            lock (gate)
+            {
+                if (string.Equals(videoProgram, helperPath, StringComparison.OrdinalIgnoreCase)) return;
+                Run("advfirewall firewall delete rule name=\"" + VideoRuleName + "\"");
+                if (Run(VideoRuleArguments(helperPath))) videoProgram = helperPath;
+            }
+        }
+
+        internal static string VideoRuleArguments(string helperPath)
+        {
+            if (helperPath.IndexOf('"') >= 0) throw new ArgumentException("helper path");
+            return "advfirewall firewall add rule name=\"" + VideoRuleName + "\"" +
+                   " dir=in action=allow program=\"" + helperPath + "\" protocol=UDP" +
+                   " enable=yes profile=private,domain";
+        }
+
         private static bool Run(string args)
         {
             try

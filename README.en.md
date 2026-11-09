@@ -1,3 +1,7 @@
+## v1.9.10 lower screen latency on LAN
+
+The agent now requests 1 ms timer resolution only while a screen viewer is connected; the default 15.6 ms granularity capped 1440p JPEG scrolling near 25 fps. On a direct LAN path the H.264 helper starts at the resolution cap (1080p 8, 1440p 12, 4K 16 Mbps) instead of ramping from 2 Mbps with an encoder restart every 8 seconds, and the browser no longer cuts the rate again during the 5 seconds after a change. A firewall rule allows LAN UDP for the hashed video helper file only (private/domain profiles). NVENC requires NVIDIA driver 610 or newer with the bundled FFmpeg. See [measurements](docs/stream-latency-1910.md).
+
 ## v1.9.7 Web MCP and immediate startup
 
 MCP clients now use HTTPS with OAuth, including LAN HTTPS connections. The direct LAN HTTP listener, stdio client, client configuration window, and legacy ZIP/MCPB packages are removed. The internal Web gateway backend listens only on localhost. Enabled MCP starts before screen initialization, and existing configured gateway tasks and HTTPS services are checked immediately and recovered when stopped. Running or disabled tasks, saved authentication, and connection settings are preserved. See [configuration](docs/webmcp.md) and [validation](docs/mcp-startup-197.md).

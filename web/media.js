@@ -57,7 +57,7 @@ function RemoteVideo(options) {
   var self = this, peer = null, serial = 0, id = 0, generation = 0;
   var video = null, timer = null, ready = false, remote = [], local = [], offered = false;
   var lastFrame = 0, started = 0, previous = null, statsPending = false;
-  var maxRate = 6000000, rate = 2000000, good = 0, automatic = true, encoder = 'H.264';
+  var maxRate = 6000000, rate = 2000000, good = 0, automatic = true, encoder = 'H.264', rateChangedAt = 0;
   var currentInfo = null;
   function signal(op, data) { options.send({ t: 'rtc', op: op, id: id, view: options.view(), data: data || '' }); }
   function close(notify) {
@@ -80,9 +80,11 @@ function RemoteVideo(options) {
     close(true); currentInfo = info;
     if (!info || info.rtc !== 1 || typeof RTCPeerConnection === 'undefined' || document.hidden) return;
     var gen = generation;
-    id = ++serial; started = lastFrame = performance.now(); good = 0;
-    maxRate = info.w * info.h >= 3840 * 2160 ? 12000000 : 6000000;
-    rate = Math.min(maxRate, info.w * info.h >= 3840 * 2160 ? 4000000 : 2000000);
+    id = ++serial; started = lastFrame = rateChangedAt = performance.now(); good = 0;
+    // src/RtcSession.cs Bitrates 와 같은 표. 같은 LAN 이면 helper 가 'bitrate' 로 상한부터 시작한다고 알려 준다.
+    var pixels = info.w * info.h;
+    maxRate = pixels >= 3840 * 2160 ? 16000000 : pixels >= 2560 * 1440 ? 12000000 : 8000000;
+    rate = Math.min(maxRate, pixels >= 3840 * 2160 ? 4000000 : pixels >= 2560 * 1440 ? 3000000 : 2000000);
     if (!video) {
       video = document.createElement('video'); video.autoplay = true; video.muted = true; video.playsInline = true;
       video.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none;object-fit:fill';
@@ -151,9 +153,14 @@ function RemoteVideo(options) {
               var delay = emitted > 0 ? (r.jitterBufferDelay - previous.jitterBufferDelay) / emitted : 0;
               if (frames > 0 && !video.requestVideoFrameCallback) lastFrame = now;
               options.stats(Math.max(0, r.bytesReceived - previous.bytesReceived), frames);
-              if (automatic) {
+              // 전송률을 바꾸면 helper 가 인코더를 다시 띄워 화면이 잠깐(최대 0.7초) 멎는다. 그 직후의
+              // 지연·손실은 회선 상태가 아니라 재시작의 흔적이라, 그걸 보고 또 깎으면 또 재시작하는
+              // 악순환으로 500kbps 까지 떨어졌다(video-helper latency bench). 바꾼 뒤 잠시는 판단을 쉰다.
+              if (automatic && now - rateChangedAt >= 5000 && frames > 0) {
+                var before = rate;
                 if (loss > .03 || delay > .12) { rate = Math.max(500000, Math.floor(rate * .65)); good = 0; }
                 else if (++good >= 8) { rate = Math.min(maxRate, Math.floor(rate * 1.35)); good = 0; }
+                if (rate !== before) rateChangedAt = now;
               }
             }
             previous = r;
@@ -168,6 +175,12 @@ function RemoteVideo(options) {
     var gen = generation, thisPeer = peer;
     if (m.op === 'stop') { close(false); return; }
     if (m.op === 'encoder') { encoder = m.data; if (ready) options.mode(encoder); return; }
+    if (m.op === 'bitrate') {
+      // helper 가 실제로 시작한 전송률. 여기서 다른 값을 'ready' 로 보내면 helper 가 2초 뒤 인코더를 다시 띄운다.
+      var start = parseInt(m.data, 10);
+      if (start > 0 && automatic) { rate = Math.min(maxRate, start); good = 0; rateChangedAt = performance.now(); }
+      return;
+    }
     if (m.op === 'answer') {
       thisPeer.setRemoteDescription({ type: 'answer', sdp: m.data }).then(function () {
         if (gen !== generation) return;

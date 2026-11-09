@@ -111,6 +111,15 @@ namespace RemoteControl
                 Check(!PrivacyScreen.IsActive, "WebSocket loss automatically restores physical monitor");
                 Check(!ControlTest.Events.Exists(delegate(Native.INPUT e) { return e.type == 0 && e.U.mi.dwFlags == Native.MOUSEEVENTF_RIGHTUP; }), "disconnect never appends a phantom right-up");
                 FourK();
+                string rule = Firewall.VideoRuleArguments(@"C:\ProgramData\RemoteControlVideoRuntime\video-helper-0123.exe");
+                Check(rule.Contains("program=\"C:\\ProgramData\\RemoteControlVideoRuntime\\video-helper-0123.exe\"") && rule.Contains("protocol=UDP") &&
+                      rule.Contains("profile=private,domain") && !rule.Contains("public") && rule.Contains("dir=in"), "video helper rule opens LAN UDP for that file only");
+                bool quoted = false; try { Firewall.VideoRuleArguments("C:\\a\" dir=out \"x.exe"); } catch (ArgumentException) { quoted = true; }
+                Check(quoted, "video helper path cannot inject netsh arguments");
+                int initial, maximum;
+                RtcSession.Bitrates(1920, 1080, out initial, out maximum); Check(initial == 2000000 && maximum == 8000000, "1080p video bitrate table matches media.js");
+                RtcSession.Bitrates(2560, 1440, out initial, out maximum); Check(initial == 3000000 && maximum == 12000000, "1440p has its own video bitrate tier");
+                RtcSession.Bitrates(3840, 2160, out initial, out maximum); Check(initial == 4000000 && maximum == 16000000 && maximum <= RtcSession.BitrateLimit, "4K video bitrate stays within helper limit");
                 Console.WriteLine("ALL " + checks + " SERVER STREAM CHECKS PASSED"); return 0;
             }
             catch (Exception ex) { Console.WriteLine(ex); return 1; }
