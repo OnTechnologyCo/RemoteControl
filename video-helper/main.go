@@ -178,7 +178,36 @@ func runWithStream(input io.Reader, w *writer, streamer func(context.Context, co
 	case <-time.After(15 * time.Second):
 		return errors.New("ICE timeout")
 	}
+	// 같은 LAN 으로 직접 붙었으면 처음부터 상한으로 보낸다. 낮게 시작해 8초마다 올리면
+	// 올릴 때마다 FFmpeg 를 다시 띄워 최대 0.7초씩 화면이 멎었고(1440p 측정: 첫 30초에 세 번),
+	// 그동안은 2~5Mbps 라 글자가 뭉개졌다. 인터넷 너머는 회선을 모르므로 기존처럼 낮게 시작한다.
+	// 정한 값을 브라우저에 알려 브라우저의 전송률 조절도 같은 값에서 시작하게 한다.
+	start := clamp(c.InitialBitrate, 500000, c.Bitrate)
+	if directLAN(sender) {
+		start = c.Bitrate
+	}
+	desired.Store(int64(start))
+	w.event("bitrate", strconv.Itoa(start))
 	return streamer(ctx, c, track, w, &desired)
+}
+
+// directLAN reports whether ICE selected a direct interface-to-interface path or a
+// private, link-local or loopback peer address. Chrome hides LAN host candidates behind
+// random mDNS names (".local"), so a host/host pair counts as direct even without an IP.
+func directLAN(sender *webrtc.RTPSender) bool {
+	transport := sender.Transport()
+	if transport == nil {
+		return false
+	}
+	pair, err := transport.ICETransport().GetSelectedCandidatePair()
+	if err != nil || pair == nil || pair.Remote == nil {
+		return false
+	}
+	if pair.Local != nil && pair.Local.Typ == webrtc.ICECandidateTypeHost && pair.Remote.Typ == webrtc.ICECandidateTypeHost {
+		return true
+	}
+	ip := net.ParseIP(pair.Remote.Address)
+	return ip != nil && (ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast())
 }
 
 func clamp(v, lo, hi int) int {

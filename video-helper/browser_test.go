@@ -32,7 +32,7 @@ func (e *browserEvents) Write(b []byte) (int, error) {
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if value["type"] == "answer" || value["type"] == "candidate" || value["type"] == "encoder" {
+	if value["type"] == "answer" || value["type"] == "candidate" || value["type"] == "encoder" || value["type"] == "bitrate" {
 		e.queue = append(e.queue, map[string]any{"t": "rtc", "id": 1, "op": value["type"], "data": value["value"]})
 	}
 	return len(b), nil

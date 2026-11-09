@@ -1,3 +1,12 @@
+## 화면 전송 지연 (v1.9.10)
+
+- 화면 연결이 있는 동안 `TimerResolution.Acquire/Release`로 대리 프로세스 타이머를 1ms로 둔다. 기본 15.6ms에서는 StreamLoop의 짧은 대기가 늘어나 1440p 스크롤이 25fps(캡처·압축은 장당 10ms)에 묶였다. 연결이 없으면 되돌린다. 제거하지 않는다.
+- 두 묶음이 나가 있는 동안 다음 화면을 미리 압축하지 않는다. fps는 늘지만 100Mbps에서 지연 p50이 80→109ms로 나빠졌다.
+- GPU 영상: helper는 ICE 후보 쌍이 host/host이거나 사설·루프백 주소면 상한으로 시작하고 `bitrate` 신호로 브라우저에 알린다. Chrome은 LAN 주소를 mDNS 이름으로 가리므로 IP만으로 판정하지 않는다. 해상도별 표 `RtcSession.Bitrates`와 `media.js`는 같은 값이어야 한다(1080p 2/8, 1440p 3/12, 4K 4/16Mbps).
+- `media.js`는 전송률을 바꾼 뒤 5초간 다시 깎지 않는다. 재시작 정지를 회선 문제로 읽으면 재시작 연쇄로 500kbps까지 떨어진다.
+- 방화벽 `원격제어 영상` 규칙은 해시 이름의 helper 파일 하나에 사설·도메인 UDP만 허용한다. 공용망을 열지 않는다. Setup은 설치·제거 때 옛 규칙을 지운다.
+- 측정은 `bench/Test-LiveView.ps1`(JPEG)과 `video-helper` `TestVideoLatencyBench`(H.264)로 한다. 둘 다 합성 화면의 시간값 바코드를 브라우저가 그린 프레임에서 읽는다. 실제 화면·입력·운영 서비스를 쓰지 않는다. 상세: docs/stream-latency-1910.md.
+
 ## HTTP 파일 업로드 호환 (v1.9.8)
 
 - Web Crypto가 없는 HTTP 화면에서도 web-mcp/sha256.mjs의 공용 SHA-256으로 2MiB 조각을 검증한다. 네이티브 digest 실패도 같은 계산기로 처리하며 검증을 생략하지 않는다. 64KiB마다 이벤트 처리를 양보한다.

@@ -38,6 +38,22 @@ namespace RemoteControl
                 return Array.IndexOf(names, "video-helper.exe.gz") >= 0 && Array.IndexOf(names, "video-ffmpeg.exe.gz") >= 0;
             }
         }
+        // helper가 받아 주는 최대값(video-helper validate). 세션 상한은 아래 Bitrates가 정한다.
+        internal const int BitrateLimit = 30000000;
+
+        // 해상도별 시작값(인터넷 너머)과 상한(같은 LAN은 처음부터 상한, video-helper directLAN).
+        // web/media.js RemoteVideo.start 의 같은 표와 반드시 맞춘다.
+        // 1440p는 예전에 1080p와 같은 2→6Mbps라 글자가 뭉개졌다. 1440p 스크롤 측정에서 10·16Mbps는
+        // 지연 p50 50~60ms로 같았고 24Mbps는 지터가 443ms로 튀어 무너졌다. 여유를 두고 12Mbps.
+        // 측정 근거는 docs/stream-latency-1910.md.
+        internal static void Bitrates(int width, int height, out int initial, out int maximum)
+        {
+            long pixels = (long)width * height;
+            if (pixels >= 3840L * 2160) { initial = 4000000; maximum = 16000000; }
+            else if (pixels >= 2560L * 1440) { initial = 3000000; maximum = 12000000; }
+            else { initial = 2000000; maximum = 8000000; }
+        }
+
         // The browser must use the same STUN policy as the sender. No TURN service
         // is provisioned by the application; blocked UDP safely stays on JPEG.
         internal static object[] IceServers()
@@ -61,12 +77,13 @@ namespace RemoteControl
             var area = src.Area;
             int adapter, output;
             DesktopDup.FindOutput(area, out adapter, out output);
+            int initial, maximum;
+            Bitrates(src.FrameWidth, src.FrameHeight, out initial, out maximum);
             var config = new Dictionary<string, object> {
                 {"type", "start"}, {"sdp", sdp}, {"X", area.X}, {"Y", area.Y},
                 {"Width", area.Width}, {"Height", area.Height}, {"OutputWidth", src.FrameWidth}, {"OutputHeight", src.FrameHeight},
                 {"Adapter", adapter}, {"Output", output}, {"FPS", 30},
-                {"InitialBitrate", (long)src.FrameWidth * src.FrameHeight >= 3840L * 2160 ? 4000000 : 2000000},
-                {"Bitrate", (long)src.FrameWidth * src.FrameHeight >= 3840L * 2160 ? 12000000 : 6000000}, {"ice", IceServers()}
+                {"InitialBitrate", initial}, {"Bitrate", maximum}, {"ice", IceServers()}
             };
             new Thread(delegate() { Run(config); }) { IsBackground = true, Name = "WebRTC video" }.Start();
         }
@@ -78,6 +95,8 @@ namespace RemoteControl
                 {
                     if (helper == null) helper = SshHelper.Prepare("video-helper.exe.gz", "video-helper", "video");
                     if (encoder == null) encoder = SshHelper.Prepare("video-ffmpeg.exe.gz", "ffmpeg", "video");
+                    // helper 를 띄우기 전에 LAN UDP 를 허용해 둔다. 경로가 같으면 다시 부르지 않는다.
+                    Firewall.EnsureVideo(helper);
                 }
                 lock (gate)
                 {

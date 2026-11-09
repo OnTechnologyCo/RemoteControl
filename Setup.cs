@@ -82,7 +82,7 @@ namespace RemoteControlSetup
 
         internal const string Product = "원격제어";
 
-        internal const string Version = "1.9.9";
+        internal const string Version = "1.9.10";
 
         internal const string ExeName = "RemoteControl.exe";
 
@@ -99,6 +99,7 @@ namespace RemoteControlSetup
         internal const string RegRunValue = "RemoteControl";
 
         internal const string FirewallRule = "원격제어";
+        internal const string VideoFirewallRule = "원격제어 영상"; // src/Firewall.cs VideoRuleName 과 같아야 한다
 
 
 
@@ -587,6 +588,9 @@ namespace RemoteControlSetup
         {
 
             Run("netsh.exe", "advfirewall firewall delete rule name=\"" + App.FirewallRule + "\"", 10000);
+            // 영상 helper 규칙(src/Firewall.cs EnsureVideo)은 판마다 경로가 바뀐다. 설치·제거 때 옛 규칙을 지우고,
+            // 새 판은 첫 영상 연결 때 자기 경로로 다시 만든다.
+            Run("netsh.exe", "advfirewall firewall delete rule name=\"" + App.VideoFirewallRule + "\"", 10000);
 
             if (!add) return;
 
