@@ -1,3 +1,13 @@
+## 화면 로그인 유지 · 해상도 · 첫 영상 (v1.9.11)
+
+- 화면 로그인(`rcsid`)은 `Auth` 메모리와 `ProgramData\RemoteControl\credentials\screen-sessions.bin`에 함께 둔다. RDP로 쓰던 세션이 콘솔로 옮겨지면 대리 프로세스가 세션과 함께 죽고 새로 뜬다. 메모리에만 두면 뷰어가 재접속해도 인증 없음으로 끊겨 다시 로그인해야 했다.
+- 파일에는 토큰의 SHA-256만 둔다. DPAPI(LocalMachine) + `아이디|pwhash` 엔트로피, SYSTEM·관리자 전용 폴더. 토큰 원문을 저장하거나 Users 읽기 폴더로 옮기지 않는다.
+- `Auth.Find`는 이미 가진 Session 객체를 다시 읽어도 바꾸지 않는다(`McpHost.BridgeCall`이 객체 동일성으로 확인). 저장 실패는 메모리 동작으로 떨어뜨리고 로그인을 막지 않는다.
+- 뷰어는 세 번 연달아 `/ws`를 열지 못하면 `/peers`로 로그인 상태를 확인하고 로그인 화면이면 새로고침한다. 응답이 없으면(대리 프로세스 재시작 중) 계속 재시도한다.
+- 저장된 해상도(screenw/screenh)는 모니터 없는 PC(`Display.LooksHeadless`)에서만 다시 강제한다. 모니터·가상 모니터가 있는 PC에서 5초마다 강제하면 전체 화면 프로그램과 FHD ↔ 4K로 다투고, RDP 화면에서 고른 값이 실제 모니터에 강제됐다(192.168.195.141). 거부된 크기는 1분 뒤에만 다시 시도한다. `Display.Explain`은 DISP_CHANGE 실제 값과 맞춘다.
+- `RtcSession.Warm`은 대리 프로세스가 뜰 때 helper·FFmpeg 준비와 방화벽 규칙을 미리 한다. 첫 영상 시도가 준비(느린 PC 12초)로 브라우저 18초 시한을 넘겨 JPEG로 남았다.
+- 시험: `bench/Test-ScreenSession.ps1`(별도 프로세스 재시작), `bench/ViewerControlTest.js`, `bench/Test-StreamServer.ps1`(해상도 판단). 상세: docs/session-display-1911.md.
+
 ## 화면 전송 지연 (v1.9.10)
 
 - 화면 연결이 있는 동안 `TimerResolution.Acquire/Release`로 대리 프로세스 타이머를 1ms로 둔다. 기본 15.6ms에서는 StreamLoop의 짧은 대기가 늘어나 1440p 스크롤이 25fps(캡처·압축은 장당 10ms)에 묶였다. 연결이 없으면 되돌린다. 제거하지 않는다.
