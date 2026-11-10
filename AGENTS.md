@@ -1,3 +1,8 @@
+## FHD 미만 해상도 차단 (v1.9.12)
+
+- 원격에서 바꾸는 화면 크기는 `Display.Allowed`(가로 ≥ 1920, 세로 ≥ 1080)만 허용한다. 웹 목록(`Display.Choices`), 설정 창 목록, 서버 `screen` 요청, 저장값 복원(`Display.Target`)에 모두 같은 기준을 쓴다. 서버는 거부할 때 `note`로 이유를 보낸다.
+- 화면이 주기적으로 1024×768이 되는 것은 Windows가 모니터 EDID를 못 읽은 상태다. 원인을 원격제어에서 찾기 전에 원격제어·업무 프로그램·가상 모니터를 하나씩 멈춰 보고 주기를 잰다. 192.168.195.141의 25.3초 주기는 DisplayPort 접촉 불량이었다(docs/session-display-1911.md 4절).
+
 ## 화면 로그인 유지 · 해상도 · 첫 영상 (v1.9.11)
 
 - 화면 로그인(`rcsid`)은 `Auth` 메모리와 `ProgramData\RemoteControl\credentials\screen-sessions.bin`에 함께 둔다. RDP로 쓰던 세션이 콘솔로 옮겨지면 대리 프로세스가 세션과 함께 죽고 새로 뜬다. 메모리에만 두면 뷰어가 재접속해도 인증 없음으로 끊겨 다시 로그인해야 했다.

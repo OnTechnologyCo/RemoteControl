@@ -107,6 +107,9 @@ namespace RemoteControl
                 Check(ControlTest.Events.Count == before, "old-size mouse coordinates are not injected into resized screen");
                 Send(stream, "{\"t\":\"ack\",\"n\":" + n1 + "}"); Send(stream, "{\"t\":\"ack\",\"n\":" + n2 + "}");
                 Check(Json.Int(Until(ws, "frame"), "n", 0) > n2, "ACK resumes transmission of resized tiles");
+                // 거부 경로만 시험한다. 허용 크기를 보내면 이 PC 의 실제 해상도가 바뀐다.
+                Send(stream, "{\"t\":\"screen\",\"w\":1024,\"h\":768}");
+                Check(Json.Str(Until(ws, "note"), "s").Contains("1920x1080"), "the server refuses a remote size below FHD without touching the display");
                 client.Close(); Check(serverThread.Join(2000), "disconnect releases session and terminates both stream threads");
                 Check(!PrivacyScreen.IsActive, "WebSocket loss automatically restores physical monitor");
                 Check(!ControlTest.Events.Exists(delegate(Native.INPUT e) { return e.type == 0 && e.U.mi.dwFlags == Native.MOUSEEVENTF_RIGHTUP; }), "disconnect never appends a phantom right-up");
@@ -129,6 +132,14 @@ namespace RemoteControl
                 Check(Display.Target(false, 0, 0, new System.Drawing.Size(1024, 768), false, true, false, none, 0, 1000).IsEmpty, "automatic FHD is skipped when unsupported");
                 Check(Display.Target(true, 1920, 1080, new System.Drawing.Size(1024, 768), false, true, true, fhd, 1000, 1000 + Display.RetryFailedMs - 1).IsEmpty &&
                       Display.Target(true, 1920, 1080, new System.Drawing.Size(1024, 768), false, true, true, fhd, 1000, 1000 + Display.RetryFailedMs) == fhd, "a refused size is retried after a minute, not every 5 seconds");
+                // FHD 미만은 고를 수도, 저장값으로 복원되지도 않는다 (사용자 요청).
+                Check(Display.Allowed(1920, 1080) && Display.Allowed(2560, 1440) && Display.Allowed(3840, 2160) && Display.Allowed(2560, 1080) &&
+                      !Display.Allowed(1680, 1050) && !Display.Allowed(1600, 1200) && !Display.Allowed(1024, 768), "only FHD and larger sizes are allowed");
+                var choices = Display.Choices();
+                Check(choices.Count > 0 && choices.TrueForAll(delegate(System.Drawing.Size s) { return Display.Allowed(s.Width, s.Height); }) && choices.Contains(fhd),
+                      "the resolution list offers FHD and nothing smaller");
+                Check(Display.Target(true, 1600, 900, new System.Drawing.Size(1024, 768), false, true, true, none, 0, 1000) == fhd,
+                      "a saved size below FHD from an older version is treated as automatic FHD");
                 Console.WriteLine("ALL " + checks + " SERVER STREAM CHECKS PASSED"); return 0;
             }
             catch (Exception ex) { Console.WriteLine(ex); return 1; }
