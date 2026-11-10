@@ -1,3 +1,7 @@
+## v1.9.11 session switches, resolution flicker and first video connection
+
+Logging in at the Windows sign-in screen of a PC whose user session was left disconnected by Remote Desktop moves that session to the console and restarts the agent. Screen logins were kept only in agent memory, so the viewer could not reconnect without logging in again. Logins are now also stored as SHA-256 token hashes, DPAPI-sealed with the current credentials, in the SYSTEM/administrator-only `credentials` folder, and the viewer returns to the login page when a login has really expired. The saved screen size is now re-enforced only on PCs without a monitor; enforcing it every 5 seconds fought full-screen programs (FHD ↔ 4K flicker). The video helper runtime is prepared when the agent starts so the first viewer no longer misses the browser's 18-second video deadline. See [details](docs/session-display-1911.md).
+
 ## v1.9.10 lower screen latency on LAN
 
 The agent now requests 1 ms timer resolution only while a screen viewer is connected; the default 15.6 ms granularity capped 1440p JPEG scrolling near 25 fps. On a direct LAN path the H.264 helper starts at the resolution cap (1080p 8, 1440p 12, 4K 16 Mbps) instead of ramping from 2 Mbps with an encoder restart every 8 seconds, and the browser no longer cuts the rate again during the 5 seconds after a change. A firewall rule allows LAN UDP for the hashed video helper file only (private/domain profiles). NVENC requires NVIDIA driver 610 or newer with the bundled FFmpeg. See [measurements](docs/stream-latency-1910.md).

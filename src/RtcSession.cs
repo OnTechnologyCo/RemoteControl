@@ -87,17 +87,37 @@ namespace RemoteControl
             };
             new Thread(delegate() { Run(config); }) { IsBackground = true, Name = "WebRTC video" }.Start();
         }
+        // 내장 helper·FFmpeg(134MB)를 풀고 해시를 확인한다. 대리 프로세스마다 한 번이지만 느린 PC 에서는
+        // 12초가 걸렸다 (192.168.195.141: 첫 시도만 offer→answer 12.5초, 다음은 0.26초). 브라우저는
+        // 18초 안에 첫 영상이 없으면 JPEG 로 돌아가므로, 첫 접속만 늘 영상에 실패하고 DD 로 남았다.
+        private static void PrepareRuntime()
+        {
+            lock (prepareGate)
+            {
+                if (helper == null) helper = SshHelper.Prepare("video-helper.exe.gz", "video-helper", "video");
+                if (encoder == null) encoder = SshHelper.Prepare("video-ffmpeg.exe.gz", "ffmpeg", "video");
+                // helper 를 띄우기 전에 LAN UDP 를 허용해 둔다. 경로가 같으면 다시 부르지 않는다.
+                Firewall.EnsureVideo(helper);
+            }
+        }
+
+        /// <summary>대리 프로세스가 뜰 때 뒤에서 미리 준비한다. 실패하면 첫 영상 연결 때 다시 시도한다.</summary>
+        internal static void Warm(Action<string> log)
+        {
+            if (!Available) return;
+            new Thread(delegate ()
+            {
+                var timer = Stopwatch.StartNew();
+                try { PrepareRuntime(); log("GPU 영상 준비 완료 (" + timer.Elapsed.TotalSeconds.ToString("F1") + "초)"); }
+                catch (Exception ex) { log("GPU 영상 준비 실패: " + ex.GetType().Name + " (첫 영상 연결 때 다시 시도합니다)"); }
+            }) { IsBackground = true, Name = "Video runtime warm-up", Priority = ThreadPriority.BelowNormal }.Start();
+        }
+
         private void Run(Dictionary<string, object> config)
         {
             try
             {
-                lock (prepareGate)
-                {
-                    if (helper == null) helper = SshHelper.Prepare("video-helper.exe.gz", "video-helper", "video");
-                    if (encoder == null) encoder = SshHelper.Prepare("video-ffmpeg.exe.gz", "ffmpeg", "video");
-                    // helper 를 띄우기 전에 LAN UDP 를 허용해 둔다. 경로가 같으면 다시 부르지 않는다.
-                    Firewall.EnsureVideo(helper);
-                }
+                PrepareRuntime();
                 lock (gate)
                 {
                     if (closed != 0) return;

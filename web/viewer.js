@@ -227,14 +227,16 @@ function connect() {
 
   ws = new WebSocket(proto + location.host + '/ws' + (curPc ? '?pc=' + curPc : ''));
   ws.binaryType = 'arraybuffer';
+  var opened = false;
 
-  ws.onopen = function () { if (gen !== wsGen) return; alive = true; msg('화면 준비 중…', ''); };
+  ws.onopen = function () { if (gen !== wsGen) return; opened = true; failedOpens = 0; alive = true; msg('화면 준비 중…', ''); };
   ws.onmessage = function (ev) { if (gen === wsGen) onMessage(ev); };
 
   ws.onclose = function () {
     if (gen === wsGen && videoTransport) videoTransport.stop(false);
     if (gen !== wsGen) return;          // 우리가 갈아탄 것이다. 되살리지 않는다
 
+    if (!opened && ++failedOpens >= 3) checkLogin(gen);
     alive = false; inputReady = false;
     privacyPending = false; updatePrivacy(false);
     resetInput(false); renderGen++; tileVersions = {}; packetJobs = [];
@@ -243,6 +245,26 @@ function connect() {
   };
 
   ws.onerror = function () { };
+}
+
+// 로그인이 정말 없어졌는지 확인한다.
+//
+// 대리 프로세스가 바뀌어도 화면 로그인은 이어진다(Auth.cs 세션 저장). 그래도 8시간 만료·
+// 비밀번호 변경·로그아웃으로 로그인이 없어지면 /ws 는 인증 없이 조용히 끊기고, 뷰어는 1.5초마다
+// 다시 붙기만 하며 영영 "다시 연결합니다" 에 머물렀다. 연달아 열지 못하면 물어보고,
+// 로그인 화면이 돌아오면 그리로 보낸다. PC 가 아직 안 떠서 응답이 없으면 계속 기다린다.
+var failedOpens = 0;
+
+function checkLogin(gen) {
+  var r = new XMLHttpRequest();
+  r.open('GET', '/peers', true);
+  r.timeout = 6000;
+  r.onload = function () {
+    if (gen !== wsGen) return;
+    var type = r.getResponseHeader('Content-Type') || '';
+    if (r.status === 200 && type.indexOf('application/json') < 0) location.reload();
+  };
+  r.send();
 }
 
 /// 다른 PC 로 갈아탄다. 화면은 완전히 새로 받아야 한다.

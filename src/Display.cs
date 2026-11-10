@@ -146,18 +146,21 @@ namespace RemoteControl
 
         internal static void Forget() { lock (gate) { cached = null; } }
 
+        // ChangeDisplaySettingsEx 반환값(DISP_CHANGE_*). 예전 표는 한 칸씩 어긋나 있었다 —
+        // FAILED(-1)를 "다시 켜야 적용", BADMODE(-2)를 "드라이버가 거부" 로 적어 원격 기록만 보고
+        // 원인을 잘못 읽게 했다 (192.168.195.141 기록).
         private static string Explain(int code)
         {
             switch (code)
             {
                 case 0: return "";
-                case -1: return "다시 켜야 적용됩니다";
-                case -2: return "화면 드라이버가 거부했습니다";
-                case -3: return "이 PC 가 받아 주지 않는 크기입니다 (모니터가 없으면 목록이 좁습니다)";
-                case -4: return "설정은 됐는데 반영되지 않았습니다";
-                case -5: return "요청이 잘못됐습니다 (플래그)";
-                case -6: return "요청이 잘못됐습니다 (인자)";
-                case 1: return "두 번째 화면에는 적용할 수 없습니다";
+                case 1: return "다시 켜야 적용됩니다";
+                case -1: return "화면 드라이버가 이 크기로 바꾸지 못했습니다 (전체 화면 프로그램·잠금 화면이면 거부될 수 있습니다)";
+                case -2: return "이 화면이 받아 주지 않는 크기입니다";
+                case -3: return "설정을 저장하지 못했습니다";
+                case -4: return "요청이 잘못됐습니다 (플래그)";
+                case -5: return "요청이 잘못됐습니다 (인자)";
+                case -6: return "두 번째 화면 설정과 충돌합니다";
                 default: return "알 수 없는 오류 " + code;
             }
         }
@@ -296,32 +299,62 @@ namespace RemoteControl
             //
             // 이 기능이 원래 필요한 곳은 tscon 으로 콘솔에 돌아온 뒤(=RDP 가 아니다)
             // 모니터가 없어 작은 크기로 잡힌 경우다. 거기는 그대로 동작한다.
-            if (Win.InRemoteSession()) return "";
+            bool remote = Win.InRemoteSession();
+            if (remote) return "";
 
             int w = 0, h = 0;
             bool told = int.TryParse(Config.Get("screenw"), out w) &
                         int.TryParse(Config.Get("screenh"), out h);
 
-            told = told && w > 0 && h > 0;
-
             Size now = Current();
+            Size target = Target(told, w, h, now, remote, LooksHeadless(), Supports(AutoW, AutoH),
+                                 failedTarget, failedAt, Environment.TickCount);
+            if (target.IsEmpty) return "";
 
+            string why;
+            if (Apply(target.Width, target.Height, out why))
+            {
+                failedTarget = Size.Empty;
+                return "화면 크기를 " + now.Width + "x" + now.Height + " 에서 " + target.Width + "x" + target.Height + " 로 맞췄습니다.";
+            }
+
+            // 안 되는 크기를 5초마다 다시 시도하며 기록을 쌓지 않는다. 1분 뒤에 다시 본다.
+            failedTarget = target; failedAt = Environment.TickCount;
+            return "화면 크기를 " + target.Width + "x" + target.Height + " 로 바꾸지 못했습니다: " + why;
+        }
+
+        private static Size failedTarget = Size.Empty;
+        private static int failedAt;
+        internal const int RetryFailedMs = 60000;
+
+        /// <summary>
+        /// 지금 맞춰야 할 크기. 맞출 것이 없으면 Size.Empty.
+        ///
+        /// 모니터(또는 가상 모니터)가 있는 PC 에서는 강제하지 않는다.
+        /// 192.168.195.141 (실제 4K 모니터 + 가상 모니터) 에서 화면이 FHD ↔ 4K 를 계속 오갔다.
+        /// 전체 화면 프로그램이 해상도를 자기 크기로 바꾸면 우리가 5초마다 저장된 4K 로 되돌리고,
+        /// 프로그램이 다시 바꾸는 다툼이 끝나지 않았다 (그 프로그램을 띄우면 더 심해졌다).
+        /// 저장된 크기도 PC 하나에 하나라, RDP 화면(2560x1440 하나뿐)에서 고른 값이 세션이 콘솔로
+        /// 옮겨진 뒤 실제 4K 모니터에 강제됐다. 모니터가 있으면 윈도우가 해상도를 스스로 기억하므로
+        /// 원격 요청은 그 자리에서 적용하고 끝낸다. 계속 지키는 것은 모니터가 없어 윈도우가 작은
+        /// 크기로 되돌려 버리는 PC 뿐이다 (이 기능을 만든 원래 이유).
+        /// </summary>
+        internal static Size Target(bool told, int w, int h, Size now, bool remote, bool headless, bool supportsAuto,
+                                    Size failed, int failedTick, int tick)
+        {
+            if (remote || !headless) return Size.Empty;
+
+            told = told && w > 0 && h > 0;
             if (!told)
             {
-                if (now.Width >= 1600 || now.Height >= 900) return "";   // 이미 넉넉하다. 손대지 않는다
-                if (!Supports(AutoW, AutoH)) return "";
-
+                if (now.Width >= 1600 || now.Height >= 900) return Size.Empty;   // 이미 넉넉하다. 손대지 않는다
+                if (!supportsAuto) return Size.Empty;
                 w = AutoW; h = AutoH;
             }
 
-            if (now.Width == w && now.Height == h) return "";
-
-            string why;
-
-            if (Apply(w, h, out why))
-                return "화면 크기를 " + now.Width + "x" + now.Height + " 에서 " + w + "x" + h + " 로 맞췄습니다.";
-
-            return "화면 크기를 " + w + "x" + h + " 로 바꾸지 못했습니다: " + why;
+            if (now.Width == w && now.Height == h) return Size.Empty;
+            if (failed.Width == w && failed.Height == h && tick - failedTick < RetryFailedMs) return Size.Empty;
+            return new Size(w, h);
         }
 
         private static DEVMODE New()

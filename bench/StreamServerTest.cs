@@ -120,6 +120,15 @@ namespace RemoteControl
                 RtcSession.Bitrates(1920, 1080, out initial, out maximum); Check(initial == 2000000 && maximum == 8000000, "1080p video bitrate table matches media.js");
                 RtcSession.Bitrates(2560, 1440, out initial, out maximum); Check(initial == 3000000 && maximum == 12000000, "1440p has its own video bitrate tier");
                 RtcSession.Bitrates(3840, 2160, out initial, out maximum); Check(initial == 4000000 && maximum == 16000000 && maximum <= RtcSession.BitrateLimit, "4K video bitrate stays within helper limit");
+                // 해상도 강제: 모니터가 있으면 다투지 않는다 (192.168.195.141 FHD ↔ 4K 깜빡임).
+                var fhd = new System.Drawing.Size(1920, 1080); var none = System.Drawing.Size.Empty;
+                Check(Display.Target(true, 3840, 2160, fhd, false, false, true, none, 0, 1000).IsEmpty, "a monitor PC never re-forces the saved size against a full-screen program");
+                Check(Display.Target(true, 3840, 2160, fhd, true, true, true, none, 0, 1000).IsEmpty, "an RDP session is never resized");
+                Check(Display.Target(true, 1920, 1080, new System.Drawing.Size(1024, 768), false, true, true, none, 0, 1000) == fhd, "a headless PC restores the saved size");
+                Check(Display.Target(false, 0, 0, new System.Drawing.Size(1024, 768), false, true, true, none, 0, 1000) == fhd, "a headless PC without a saved size is raised to FHD");
+                Check(Display.Target(false, 0, 0, new System.Drawing.Size(1024, 768), false, true, false, none, 0, 1000).IsEmpty, "automatic FHD is skipped when unsupported");
+                Check(Display.Target(true, 1920, 1080, new System.Drawing.Size(1024, 768), false, true, true, fhd, 1000, 1000 + Display.RetryFailedMs - 1).IsEmpty &&
+                      Display.Target(true, 1920, 1080, new System.Drawing.Size(1024, 768), false, true, true, fhd, 1000, 1000 + Display.RetryFailedMs) == fhd, "a refused size is retried after a minute, not every 5 seconds");
                 Console.WriteLine("ALL " + checks + " SERVER STREAM CHECKS PASSED"); return 0;
             }
             catch (Exception ex) { Console.WriteLine(ex); return 1; }

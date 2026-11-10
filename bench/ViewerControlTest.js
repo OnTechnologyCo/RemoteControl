@@ -117,6 +117,22 @@ async function run() {
   const small = grid.sandbox.drawTile(509, new Uint8Array([1]));
   grid.decodes[2]({name:'small',close(){}}); await small;
   check('slow-link fallback restores small-tile coordinates', () => assert.deepEqual(positions[1], {name:'small',x:3712,y:2048}));
+
+  // 로그인이 정말 없어졌을 때(만료·비밀번호 변경) 뷰어가 "다시 연결합니다" 에 영영 머물지 않는다.
+  const auth = fixture(false); let reloads = 0;
+  auth.sandbox.location.reload = () => { reloads++; };
+  const XHR = auth.sandbox.XMLHttpRequest, peersAsked = () => XHR.last && XHR.last.url === '/peers' ? XHR.last : null;
+  function refused() { auth.sandbox.connect(); auth.FakeWS.last.onclose(); }
+  XHR.last = null; refused(); refused(); auth.connect(); refused(); refused();
+  check('a successful open resets the failed-connection count', () => assert.equal(peersAsked(), null));
+  refused();
+  const askLogin = peersAsked();
+  check('three refused screen connections ask whether the login still exists', () => assert.ok(askLogin));
+  askLogin.getResponseHeader = () => 'application/json; charset=utf-8'; askLogin.onload();
+  check('a live login keeps retrying instead of reloading', () => assert.equal(reloads, 0));
+  XHR.last = null; refused(); refused(); refused();
+  const expired = peersAsked(); expired.getResponseHeader = () => 'text/html; charset=utf-8'; expired.onload();
+  check('an expired login returns to the login page', () => assert.equal(reloads, 1));
   console.log('ALL ' + checks + ' VIEWER CONTROL CHECKS PASSED');
 }
 run().catch(error => { console.error(error); process.exitCode = 1; });

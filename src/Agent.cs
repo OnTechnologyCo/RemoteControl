@@ -17,6 +17,15 @@ namespace RemoteControl
         internal static void Run()
         {
             Config.EnsureWritable(); // Policy is protected before any privileged work.
+
+            // 사용자 세션이 콘솔로 옮겨지며 대리 프로세스가 새로 떠도 화면 로그인이 이어지게 한다.
+            // 메모리에만 두면 RDP 로 쓰던 PC 에서 로그인 화면으로 로그인한 직후 끊기고 다시
+            // 로그인해야 했다 (Auth.cs "세션 저장"). 화면 포트를 열기 전에 켠다.
+            if (!Auth.UsePersistentStore(Auth.DefaultStorePath,
+                    delegate { return Config.User + "|" + Config.Get("pwhash"); },
+                    delegate (string dir) { RemoteControlSecrets.ConfigProtection.HardenDirectory(dir, true); }))
+                SvcLog.Write("화면 로그인 저장소를 쓰지 못해 이번 실행은 메모리에만 둡니다: " + Auth.StoreError);
+
             Server server = new Server();
             server.Notice += delegate (string s) { SvcLog.Write(s); };
             server.StartMcp();
@@ -55,6 +64,9 @@ namespace RemoteControl
             }
 
             SyncFirewall();
+
+            // 첫 영상 연결이 helper 를 푸느라 브라우저 시한(18초)을 넘기지 않게 미리 준비한다 (RtcSession.cs).
+            RtcSession.Warm(delegate (string s) { SvcLog.Write(s); });
 
             // 사람이 로그인하지 않아도 밖에서 들어올 수 있어야 한다.
             // 그러려면 창을 띄우지 않아도 터널이 알아서 올라와야 한다.
