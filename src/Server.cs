@@ -959,6 +959,13 @@ namespace RemoteControl
                         {
                             int nw = Json.Int(o, "w", 0), nh = Json.Int(o, "h", 0);
                             if (nw <= 0 || nh <= 0) break;
+                            // 목록에서 빼도 옛 뷰어나 직접 만든 요청이 올 수 있다. FHD 미만은 바꾸지 않는다.
+                            if (!Display.Allowed(nw, nh))
+                            {
+                                output.Post(delegate { ws.SendText("{\"t\":\"note\",\"s\":\"" + Json.Escape(
+                                    nw + "x" + nh + " 은 고를 수 없습니다. 화면 크기는 " + Display.AutoW + "x" + Display.AutoH + " 이상만 바꿉니다.") + "\"}"); });
+                                break;
+                            }
 
                             output.Post(delegate {
                             // 기억해 둔다. 원격 데스크톱을 끊는 등으로 크기가 무너져도

@@ -210,6 +210,13 @@ namespace RemoteControl
 
         internal const int AutoW = 1920, AutoH = 1080;
 
+        /// <summary>
+        /// 원격에서 고를 수 있는 가장 작은 크기는 FHD 다 (가로 1920 미만 또는 세로 1080 미만은 쓰지 않는다).
+        /// 1024x768 같은 작은 크기로 바꾸면 업무 프로그램 화면이 잘리고, 192.168.195.141 처럼 모니터가
+        /// 잠깐 1024x768 로 떨어지는 PC 에서는 원인과 섞여 구분하기 어려웠다 (사용자 요청).
+        /// </summary>
+        internal static bool Allowed(int w, int h) { return w >= AutoW && h >= AutoH; }
+
         // 모드 목록은 잘 안 바뀌는데 뽑는 데 시간이 걸린다. 한 번 뽑아 두고 쓴다.
         private static List<Size> cached;
         private static readonly object gate = new object();
@@ -233,6 +240,7 @@ namespace RemoteControl
 
             foreach (Size s in ModesCached())
             {
+                if (!Allowed(s.Width, s.Height)) continue;
                 seen[s.Width * 100000 + s.Height] = true;
                 r.Add(s);
             }
@@ -242,12 +250,7 @@ namespace RemoteControl
             // 모니터가 없으면 윈도우가 내놓는 목록이 실제로 되는 것보다 좁게 나온다.
             // 목록에 없다고 미리 빼 버리면 사용자는 시도조차 못 한다.
             // 눌러 보고 안 되면 그때 이유를 알려 주는 편이 낫다.
-            Size[] common = {
-                new Size(3840, 2160),
-                new Size(1920, 1080), new Size(1600, 900), new Size(1440, 900),
-                new Size(1366, 768),  new Size(1280, 800), new Size(1280, 720),
-                new Size(1024, 768)
-            };
+            Size[] common = { new Size(3840, 2160), new Size(2560, 1440), new Size(1920, 1080) };
 
             foreach (Size s in common)
             {
@@ -344,7 +347,7 @@ namespace RemoteControl
         {
             if (remote || !headless) return Size.Empty;
 
-            told = told && w > 0 && h > 0;
+            told = told && Allowed(w, h);   // 예전 판에서 저장한 FHD 미만 값은 자동(FHD)으로 본다
             if (!told)
             {
                 if (now.Width >= 1600 || now.Height >= 900) return Size.Empty;   // 이미 넉넉하다. 손대지 않는다

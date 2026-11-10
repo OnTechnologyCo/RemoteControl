@@ -1,3 +1,7 @@
+## v1.9.12 no screen sizes below FHD
+
+Remote screen-size choices are limited to 1920×1080 or larger in the web viewer, the settings window and the server. Smaller saved sizes from older versions are no longer re-applied. The periodic 1024×768 drop investigated on one PC was a loose DisplayPort connection, not RemoteControl. See [details](docs/session-display-1911.md).
+
 ## v1.9.11 session switches, resolution flicker and first video connection
 
 Logging in at the Windows sign-in screen of a PC whose user session was left disconnected by Remote Desktop moves that session to the console and restarts the agent. Screen logins were kept only in agent memory, so the viewer could not reconnect without logging in again. Logins are now also stored as SHA-256 token hashes, DPAPI-sealed with the current credentials, in the SYSTEM/administrator-only `credentials` folder, and the viewer returns to the login page when a login has really expired. The saved screen size is now re-enforced only on PCs without a monitor; enforcing it every 5 seconds fought full-screen programs (FHD ↔ 4K flicker). The video helper runtime is prepared when the agent starts so the first viewer no longer misses the browser's 18-second video deadline. See [details](docs/session-display-1911.md).
