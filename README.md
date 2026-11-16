@@ -1,4 +1,12 @@
-# 원격제어 v1.9.13
+# 원격제어 v1.9.14
+
+## v1.9.14 Web MCP 설정 창과 아이콘 표시 수정
+
+일반 권한 창에서 Web MCP 설정을 누르면 관리자 권한의 메인 창을 하나 더 열던 문제를 수정했습니다. 이제 필요한 권한으로 전용 Web MCP 설정 창을 바로 열고, 반복 클릭은 기존 설정 창을 활성화합니다. 관리자 설정 창의 중복 실행도 막습니다.
+
+일반·관리자·MCP 설정 화면의 DPI/글꼴 초기화를 통일해 관리자 창에서 원격제어 아이콘 문자와 상태 표시가 네모로 나오는 문제를 수정했습니다. MCP 설정에는 실행 파일의 아이콘도 표시합니다.
+
+설치 파일: dist/RemoteControl_Setup_v1.9.14.exe. [원인과 검증](docs/mcp-settings-window-1914.md).
 
 ## v1.9.13 Gemini 웹 MCP 연결
 
@@ -123,7 +131,7 @@ MCP 인증은 원격제어·웹 중계 재시작과 일시적인 통신 장애 �
 | 파일 | 용도 |
 |---|---|
 | `dist\RemoteControl.exe` | 프로그램 본체 |
-| `dist\RemoteControl_Setup_v1.9.13.exe` | 공유할 PC 설치·업데이트용 setup |
+| `dist\RemoteControl_Setup_v1.9.14.exe` | 공유할 PC 설치·업데이트용 setup |
 | `dist\RemoteControl_WebPlugin.zip` | HTTPS/OAuth MCP 연결 플러그인 |
 
 프로젝트 폴더에서 아래 명령 하나로 본체와 setup을 함께 갱신합니다.
@@ -138,7 +146,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\빌드_setup.ps1
 
 빌드는 설치된 서비스를 중지하지 않으며 관리자 권한도 요구하지 않습니다. `dist`의 파일을 직접 실행 중이어서 덮어쓸 수 없으면 그 실행본을 종료한 뒤 다시 빌드하세요.
 
-실제 업데이트는 **`dist\RemoteControl_Setup_v1.9.13.exe`**를 실행해 진행합니다. 설치 시 관리자 권한을 요청하고 원격제어 프로그램·서비스를 다시 시작합니다. 빌드만으로 `C:\Program Files\RemoteControl`의 설치본이 업데이트되지는 않습니다. 기존 프로그램이 떠 있으면 새 exe를 실행해도 중복 실행 방지 때문에 기존 창이 열릴 수 있습니다.
+실제 업데이트는 **`dist\RemoteControl_Setup_v1.9.14.exe`**를 실행해 진행합니다. 설치 시 관리자 권한을 요청하고 원격제어 프로그램·서비스를 다시 시작합니다. 빌드만으로 `C:\Program Files\RemoteControl`의 설치본이 업데이트되지는 않습니다. 기존 프로그램이 떠 있으면 새 exe를 실행해도 중복 실행 방지 때문에 기존 창이 열릴 수 있습니다.
 
 ## 변경 내용
 

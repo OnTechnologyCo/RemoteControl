@@ -1,3 +1,11 @@
+## Web MCP 전용 설정 창 (v1.9.14)
+
+- 메인 Web MCP 링크는 OpenMcpSettings를 통해 --mcp-settings 관리자 진입점을 사용한다. 링크를 RequireAdminSettings/--admin-ui로 돌려 메인 창·트레이·서버를 추가 생성하지 않는다.
+- --admin-ui와 --mcp-settings는 관리자 권한 검사 후 SettingsWindow.Initialize를 실행한다. 일반 UI도 같은 DPI·VisualStyles·SetCompatibleTextRenderingDefault(false)를 폼 생성 전에 적용한다.
+- SettingsWindow의 세션별 mutex/event는 설정 창 하나를 열거나 활성화하는 용도다. IPC로 설정/경로/자격 증명/임의 작업을 전달하거나 ACL을 낮추지 않는다. 모달 창·독립 창 모두 같은 MCP 중복 방지를 사용한다.
+- bench/Test-SettingsWindow.ps1은 일반 권한 진입 거부, 숨겨진 합성 폼의 별도 프로세스 중복 실행·활성화·종료·재열기와 GDI 텍스트 초기화를 확인한다. 운영 설정·서비스·사용자 바탕 화면을 변경하지 않는다.
+- 빌드 증빙은 현재 버전 Setup과 고정 이름 사본만 담고 dist에 보관한 과거 버전 Setup은 현재 빌드 산출물에서 제외한다.
+
 ## Gemini 웹 OAuth와 버전 설치 파일 (v1.9.13)
 
 - Google의 정확한 oauth-redirect, oauth-redirect-sandbox, oauth-redirect-test.googleusercontent.com HTTPS /r/<id>, /a/<id>만 허용한다. DCR은 Google에 한해 고유 URI 1~6개를 받으며 SDK 정규화 전에도 검사한다. 승인 URI는 등록 문자열과, 코드 교환 URI는 실제 승인 URI와 일치해야 한다.
