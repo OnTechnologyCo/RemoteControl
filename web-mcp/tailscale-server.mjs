@@ -29,7 +29,7 @@ export function createTailscaleServer(config,{directory,readActive,now=Date.now,
     gateway?.close();gateway=null;identity='';
     if(next){gateway=createGateway(next,{directory,...gatewayOptions});identity=key;}
   }
-  const server=createServer({maxHeaderSize:16384,requestTimeout:45000,headersTimeout:10000},(req,res)=>{
+  const server=createServer({maxHeaderSize:32768,requestTimeout:45000,headersTimeout:10000},(req,res)=>{
     sync();
     if(!gateway){res.writeHead(503,{'Content-Type':'text/plain','Cache-Control':'no-store'});res.end('Waiting for the RemoteControl '+label+' connection');return;}
     gateway.app(req,res);

@@ -22,10 +22,19 @@ const CALLBACKS = new Map([...CLIENTS.values()].map(client => [client.callback, 
 const SCOPE = 'remotecontrol';
 const COOKIE = '__Host-rc-connect';
 const minute = 60000;
+const MAX_OAUTH_STATE_BYTES = 8 * 1024;
+const googleCallback = uri => typeof uri === 'string' && uri.length <= 2048 && !/[\u0000-\u0020\u007f\\]/.test(uri) &&
+  /^https:\/\/oauth-redirect(?:-sandbox|-test)?\.googleusercontent\.com\/[ra]\/[A-Za-z0-9_-]+$/.test(uri);
+const googleCallbacks = uris => Array.isArray(uris) && uris.length >= 1 && uris.length <= 6 &&
+  new Set(uris).size === uris.length && uris.every(googleCallback);
+const registrationName = (uris, lan) => Array.isArray(uris) && uris.length === 1
+  ? callbackName(uris[0], lan) : !lan && googleCallbacks(uris) ? 'Google (Gemini)' : undefined;
+const validState = state => typeof state === 'string' && state.length > 0 && Buffer.byteLength(state) <= MAX_OAUTH_STATE_BYTES;
 // 웹 OAuth는 공식 웹 콜백과 로컬 앱 콜백을 허용한다. LAN은 루프백만 허용하고 CIMD를 읽지 않는다.
 export function callbackName(uri, lan = false) {
   // 서버가 외부 HTTPS여도 Claude Code의 인증 완료 주소는 클라이언트 PC의 루프백이다.
   if (!lan && CALLBACKS.has(uri)) return CALLBACKS.get(uri);
+  if (!lan && googleCallback(uri)) return 'Google (Gemini)';
   // 임의 도메인/사설 IP, userinfo, query, fragment, 변형 IP 표기와 제어 문자는 허용하지 않는다.
   if (typeof uri !== 'string' || uri.length > 2048 ||
       !/^http:\/\/(?:127\.0\.0\.1|localhost|\[::1\]):[1-9][0-9]{3,4}(?:\/[^?#]*)?$/.test(uri) ||
@@ -136,16 +145,21 @@ class Clients {
     return this.pending.get(id);
   }
   async registerClient(client) {
-    if (!Array.isArray(client.redirect_uris) || client.redirect_uris.length !== 1 || !callbackName(client.redirect_uris[0], this.lan) ||
-      !['none','client_secret_post'].includes(client.token_endpoint_auth_method || 'client_secret_post') ||
-      client.grant_types?.some(g => !['authorization_code','refresh_token'].includes(g)) ||
-      client.response_types?.some(r => r !== 'code')) throw new InvalidClientMetadataError('Supported callback and authorization_code flow required');
-    if (this.clients.size >= 128) throw new TemporarilyUnavailableError('OAuth client registration limit reached');
+    const name = registrationName(client.redirect_uris, this.lan);
+    if (!name) throw new InvalidClientMetadataError('callback_invalid');
+    if (!['none','client_secret_post'].includes(client.token_endpoint_auth_method || 'client_secret_post'))
+      throw new InvalidClientMetadataError('auth_method_unsupported');
+    if (client.grant_types?.some(g => !['authorization_code','refresh_token'].includes(g)) ||
+      client.response_types?.some(r => r !== 'code')) throw new InvalidClientMetadataError('flow_unsupported');
+    if (this.clients.size >= 128) throw new TemporarilyUnavailableError('capacity_reached');
     // DCR 이름은 누구나 정할 수 있어 로그인 화면의 신원 표시로 신뢰하지 않는다.
-    const saved = { ...client, client_name: callbackName(client.redirect_uris[0], this.lan), client_id: random(), client_id_issued_at: Math.floor(Date.now()/1000) };
+    const saved = { ...client, token_endpoint_auth_method:client.token_endpoint_auth_method || 'client_secret_post', client_name: name, client_id: random(), client_id_issued_at: Math.floor(Date.now()/1000) };
     const next = [...this.clients.values(), saved];
-    writeFileSync(this.file + '.tmp', JSON.stringify(next), { mode: 0o600 });
-    renameSync(this.file + '.tmp', this.file); this.clients.set(saved.client_id, saved);
+    try {
+      writeFileSync(this.file + '.tmp', JSON.stringify(next), { mode: 0o600 });
+      renameSync(this.file + '.tmp', this.file);
+    } catch { throw new TemporarilyUnavailableError('storage_unavailable'); }
+    this.clients.set(saved.client_id, saved);
     return saved;
   }
 }
@@ -173,13 +187,26 @@ class Provider {
       if (!/^[A-Za-z0-9_-]{43}$/.test(row.token) || !grants.has(row.grant) || !Number.isSafeInteger(row.expires) || (name === 'refresh' && typeof row.used !== 'boolean') || table.has(row.token)) throw Error('Invalid OAuth token');
       table.set(row.token, {grant:grants.get(row.grant), expires:row.expires, ...(name === 'refresh' ? {used:row.used} : {})});
     }
+    const pending = saved.pending || [];
+    if (!Array.isArray(pending) || pending.length > 128) throw Error('Invalid pending OAuth state');
+    for (const [transaction, value] of pending) {
+      if (!/^[A-Za-z0-9_-]{43}$/.test(transaction) || this.pending.has(transaction) ||
+          !value || !/^[A-Za-z0-9_-]{43}$/.test(value.csrf) || !/^[A-Za-z0-9_-]{43}$/.test(value.codeChallenge) ||
+          typeof value.clientId !== 'string' || value.clientId.length > 2048 ||
+          !validState(value.state) || !callbackName(value.redirectUri, this.config.mode === 'lan') ||
+          value.resource !== this.resource || !Number.isSafeInteger(value.expires) ||
+          value.expires > this.now() + 10 * minute ||
+          (value.scopes !== undefined && (!Array.isArray(value.scopes) || value.scopes.some(s => s !== SCOPE))))
+        throw Error('Invalid pending OAuth request');
+      if (value.expires > this.now()) this.pending.set(transaction, {...value, resource:new URL(value.resource)});
+    }
     this.sweep();
   }
   persist() {
     const grants = [...this.grants].filter(g => g.authorized && !g.revoked);
     const ids = new Set(grants.map(g => g.id));
     const rows = table => [...table].filter(([,v]) => ids.has(v.grant.id)).map(([token,v]) => ({token, grant:v.grant.id, expires:v.expires, ...(table === this.refresh ? {used:v.used} : {})}));
-    try { this.state.write({version:1, grants:grants.map(g => ({id:g.id,clientId:g.clientId,clientName:g.clientName,cookie:g.cookie,expires:g.expires})), access:rows(this.access), refresh:rows(this.refresh)}); }
+    try { this.state.write({version:1, grants:grants.map(g => ({id:g.id,clientId:g.clientId,clientName:g.clientName,cookie:g.cookie,expires:g.expires})), access:rows(this.access), refresh:rows(this.refresh), pending:[...this.pending].map(([id, value]) => [id, {...value, resource:value.resource.href}])}); }
     catch { throw new TemporarilyUnavailableError('Authentication storage temporarily unavailable'); }
   }
   checkResource(resource) { if (resource?.href !== this.resource) throw new InvalidTargetError('resource must match this MCP server'); }
@@ -187,18 +214,19 @@ class Provider {
   sweep() {
     let changed = false;
     for (const item of this.codes.values()) if (item.expires <= this.now()) this.drop(item.grant);
-    for (const table of [this.pending, this.codes, this.access, this.refresh]) for (const [key, v] of table) if (v.expires <= this.now()) { table.delete(key); if (table === this.access || table === this.refresh) changed = true; }
+    for (const table of [this.pending, this.codes, this.access, this.refresh]) for (const [key, v] of table) if (v.expires <= this.now()) { table.delete(key); if (table !== this.codes) changed = true; }
     for (const grant of this.grants) if (grant.expires <= this.now()) this.drop(grant);
     if (changed) this.persist();
   }
   async authorize(client, params, res) {
     this.sweep(); this.checkResource(params.resource); this.checkScopes(params.scopes);
-    if (!callbackName(params.redirectUri, this.config.mode === 'lan')) throw new InvalidRequestError('Supported callback required');
-    if (!/^[A-Za-z0-9_-]{43}$/.test(params.codeChallenge) || !params.state || params.state.length > 1024)
+    if ((googleCallback(params.redirectUri) && !client.redirect_uris?.includes(params.redirectUri)) || !callbackName(params.redirectUri, this.config.mode === 'lan')) throw new InvalidRequestError('Supported callback required');
+    if (!/^[A-Za-z0-9_-]{43}$/.test(params.codeChallenge) || !validState(params.state))
       throw new InvalidRequestError('S256 challenge and state required');
     if (this.pending.size >= 128 || this.grants.size >= 64) throw new TemporarilyUnavailableError('Too many pending connections');
     const transaction = random(), csrf = random();
     this.pending.set(transaction, { ...params, clientId: client.client_id, csrf, expires: this.now() + 10 * minute });
+    try { this.persist(); } catch (error) { this.pending.delete(transaction); throw error; }
     res.cookie(COOKIE, transaction, { httpOnly: true, secure: true, sameSite: 'lax', path: '/', maxAge: 10 * minute });
     res.type('html').send(loginPage(csrf, this.config.publicUrl, callbackName(params.redirectUri, this.config.mode === 'lan')));
   }
@@ -210,6 +238,7 @@ class Provider {
       return res.status(403).type('text').send('연결 요청이 만료되었거나 올바르지 않습니다. 사용 중인 앱에서 다시 연결하세요.');
     // 한 폼의 동시 제출로 여러 인증 코드/세션이 생기지 않게 먼저 소모한다.
     this.pending.delete(transaction);
+    try { this.persist(); } catch (error) { this.pending.set(transaction, pending); throw error; }
     res.clearCookie(COOKIE, { httpOnly: true, secure: true, sameSite: 'lax', path: '/' });
     const redirect = new URL(pending.redirectUri);
     redirect.searchParams.set('state', pending.state); redirect.searchParams.set('iss', this.issuer);
@@ -241,21 +270,22 @@ class Provider {
     this.checkResource(resource);
     const item = this.code(client, code);
     if (redirectUri !== item.redirectUri) throw new InvalidGrantError('redirect_uri does not match');
+    const tokens = this.issue(item.grant);
     this.codes.delete(code);
-    return this.issue(item.grant);
+    return tokens;
   }
-  issue(grant, consumed = null) {
+  issue(grant, consumed = null, persistentToken = null) {
     this.sweep();
     if (grant.revoked || grant.expires <= this.now()) throw new InvalidGrantError('Connection expired');
-    if (this.access.size >= 256 || this.refresh.size >= 4096) throw new TemporarilyUnavailableError('OAuth token limit reached');
-    const access_token = random(), refresh_token = random();
+    if (this.access.size >= 256 || (!persistentToken && this.refresh.size >= 4096)) throw new TemporarilyUnavailableError('OAuth token limit reached');
+    const access_token = random(), refresh_token = persistentToken || random();
     const expires_in = Math.min(3600, Math.floor((grant.expires - this.now()) / 1000));
     this.access.set(access_token, {grant, expires: this.now() + expires_in * 1000});
-    this.refresh.set(refresh_token, {grant, expires: grant.expires, used: false});
+    if (!persistentToken) this.refresh.set(refresh_token, {grant, expires: grant.expires, used: false});
     const previous = consumed && {used:consumed.used, expires:consumed.expires};
     if (consumed) { consumed.used = true; consumed.expires = Math.min(grant.expires, this.now() + 24 * 60 * minute); }
     grant.id ||= random(); grant.authorized = true;
-    try { this.persist(); } catch (error) { this.access.delete(access_token); this.refresh.delete(refresh_token); if (consumed) Object.assign(consumed, previous); throw error; }
+    try { this.persist(); } catch (error) { this.access.delete(access_token); if (!persistentToken) this.refresh.delete(refresh_token); if (consumed) Object.assign(consumed, previous); throw error; }
     return { access_token, token_type: 'Bearer', expires_in, refresh_token, scope: SCOPE };
   }
   async exchangeRefreshToken(client, token, scopes, resource) {
@@ -272,7 +302,10 @@ class Provider {
       catch { throw new TemporarilyUnavailableError('LAN MCP temporarily unreachable; retry refresh'); }
       if (probe.status === 401) { this.drop(item.grant); throw new InvalidGrantError('RemoteControl login revoked'); }
       if (probe.status !== 200) throw new TemporarilyUnavailableError('LAN MCP temporarily unavailable; retry refresh');
-      return this.issue(item.grant, item);
+      // Google persistent linking requires a stable refresh token, but only a secret-authenticated client gets this exception.
+      const persistent = this.config.mode !== 'lan' && client.token_endpoint_auth_method === 'client_secret_post' &&
+        typeof client.client_secret === 'string' && client.client_secret.length > 0 && googleCallbacks(client.redirect_uris);
+      return persistent ? this.issue(item.grant, null, token) : this.issue(item.grant, item);
     } finally { item.busy = false; }
   }
   async verifyAccessToken(token) {
@@ -309,7 +342,7 @@ function returnToClient(res, redirect, allowed, lan = false) {
 }
 
 function loginPage(csrf, origin, clientName) {
-  if (!['ChatGPT','Claude','로컬 MCP 클라이언트'].includes(clientName)) throw Error('Unknown login client');
+  if (!['ChatGPT','Claude','Google (Gemini)','로컬 MCP 클라이언트'].includes(clientName)) throw Error('Unknown login client');
   return `<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>원격제어 · ${clientName} 연결</title>
 <style>body{font:16px system-ui,sans-serif;background:#101a29;color:#eef3fa;margin:0;padding:32px 20px}main{max-width:430px;margin:5vh auto;background:#1b2a40;padding:32px;border-radius:16px}h1{font-size:25px}p{line-height:1.65;color:#ced9e8}label{display:block;margin-top:18px}input{box-sizing:border-box;width:100%;padding:12px;margin-top:7px;border:1px solid #8091ab;border-radius:7px;font:inherit}button{font:inherit;cursor:pointer;padding:12px 16px;border:0;border-radius:7px;margin:24px 8px 0 0;background:#73d9ee;color:#10202c}button[value=deny]{background:#384c66;color:white}small{overflow-wrap:anywhere;color:#b3c6df}</style>
 <main><small>${html(origin)}</small><h1>${clientName}에 원격제어 연결</h1><p>이 PC의 원격제어 아이디와 비밀번호를 입력하세요.</p><p>연결하면 ${clientName}가 파일 작업과 활성화된 명령 실행·화면 조회 기능을 사용합니다. 작업공간은 기본 위치이며 폴더 접근 제한이 아닙니다. 실제 접근은 대상 원격제어 실행 계정의 Windows 권한을 따릅니다.</p>
@@ -374,7 +407,7 @@ function createOriginGateway(c, { directory, upstream, metadata = getClientMetad
     const stages = {'/authorize':'authorize','/connect':'login','/token':'token','/mcp':'mcp','/register':'register'};
     const stage = stages[req.path], started = Date.now();
     if (stage) res.once('finish', () => {
-      try { audit({stage, method:['GET','POST','DELETE'].includes(req.method) ? req.method : 'OTHER', status:res.statusCode, ms:Date.now()-started}); } catch {}
+      try { audit({...(stage === 'register' ? {reason:res.locals.registrationReason || (res.statusCode === 201 ? 'accepted' : res.statusCode === 429 ? 'rate_limited' : 'request_rejected')} : {}), stage, method:['GET','POST','DELETE'].includes(req.method) ? req.method : 'OTHER', status:res.statusCode, ms:Date.now()-started}); } catch {}
     });
     next();
   });
@@ -405,7 +438,23 @@ function createOriginGateway(c, { directory, upstream, metadata = getClientMetad
   app.get('/', (req,res)=>res.type('text').send('RemoteControl · WebMCP 연결 주소: ' + provider.resource));
   app.post('/connect', limits.logins, express.urlencoded({inflate:false,extended:false,limit:'8kb',parameterLimit:8}), (req,res,next)=>provider.login(req,res).catch(next));
   // OAuth 요청과 MCP 요청은 본문 제한이 다르다. 인증 경로에서 큰 JSON을 먼저 읽지 않는다.
-  app.use(['/authorize','/token','/register','/revoke'], express.urlencoded({inflate:false,extended:false,limit:'16kb',parameterLimit:20}), express.json({inflate:false,limit:'16kb'}));
+  // 8KiB opaque state may occupy 24KiB after URL encoding.
+  app.use('/authorize', express.urlencoded({inflate:false,extended:false,limit:'32kb',parameterLimit:20}), express.json({inflate:false,limit:'32kb'}));
+  app.use(['/token','/register','/revoke'], express.urlencoded({inflate:false,extended:false,limit:'16kb',parameterLimit:20}), express.json({inflate:false,limit:'16kb'}));
+  app.use('/register', (req, res, next) => {
+    const json = res.json.bind(res);
+    res.json = body => {
+      const reasons = ['callback_invalid','auth_method_unsupported','flow_unsupported','capacity_reached','storage_unavailable'];
+      res.locals.registrationReason = res.statusCode === 201 ? 'accepted' :
+        reasons.includes(body?.error_description) ? body.error_description : 'metadata_invalid';
+      if (body?.error === 'temporarily_unavailable') res.status(503).set('Retry-After','30');
+      return json(body);
+    };
+    // SDK URL normalization must not turn a rejected wire callback into a registered one.
+    if (req.method === 'POST' && !registrationName(req.body?.redirect_uris, c.mode === 'lan'))
+      return res.status(400).json(new InvalidClientMetadataError('callback_invalid').toResponseObject());
+    next();
+  });
   app.use('/token', (req, res, next) => {
     // SDK는 OAuthError를 모두 400으로 보낸다. 임시 오프라인은 재로그인 대신 갱신을 재시도할 수 있게 503으로 구분한다.
     const json = res.json.bind(res);
@@ -442,6 +491,6 @@ function createOriginGateway(c, { directory, upstream, metadata = getClientMetad
     } catch(error) { next(error); }
   });
   app.use((req,res)=>res.status(404).json({error:'Not found'}));
-  app.use((error,req,res,next)=> { if(res.headersSent)return next(error); res.status(error.status === 413 ? 413 : error.status === 400 ? 400 : error.status === 415 ? 415 : 502).json({error:'Request failed; operation was not retried'}); });
+  app.use((error,req,res,next)=> { if(res.headersSent)return next(error); res.status(error instanceof TemporarilyUnavailableError ? 503 : error.status === 413 ? 413 : error.status === 400 ? 400 : error.status === 415 ? 415 : 502).json({error:'Request failed; operation was not retried'}); });
   return {app, provider, close:()=>provider.close()};
 }

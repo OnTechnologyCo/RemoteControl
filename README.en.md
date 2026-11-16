@@ -1,3 +1,9 @@
+## v1.9.13 Gemini web MCP OAuth
+
+Supports registration of up to six exact Google callbacks, opaque state up to 8 KiB, encrypted pending-approval recovery after restart, and persistent refresh tokens for secret-authenticated Google clients. Existing ChatGPT, Claude, native-loopback and LAN authentication rules remain in place.
+
+The installer is dist/RemoteControl_Setup_v1.9.13.exe; future builds derive the filename from the application version. The fixed RemoteControl_Setup.exe copy remains available for existing installation checks. See [connection details](docs/gemini-oauth-20261116.md) and [validation](docs/gemini-oauth-validation-20261116.md). Actual Gemini account linking is a separate verification step.
+
 ## v1.9.12 no screen sizes below FHD
 
 Remote screen-size choices are limited to 1920×1080 or larger in the web viewer, the settings window and the server. Smaller saved sizes from older versions are no longer re-applied. The periodic 1024×768 drop investigated on one PC was a loose DisplayPort connection, not RemoteControl. See [details](docs/session-display-1911.md).

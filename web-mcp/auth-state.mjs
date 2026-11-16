@@ -23,6 +23,7 @@ export class AuthState {
     const clear = Buffer.from(JSON.stringify({...value,issuer:this.issuer})), iv = randomBytes(12);
     let sealed;
     try {
+      if (clear.length > 2 * 1024 * 1024 - 34) throw Error('OAuth state capacity reached');
       const cipher = createCipheriv('aes-256-gcm', this.key, iv); cipher.setAAD(this.aad);
       const body = Buffer.concat([cipher.update(clear), cipher.final()]);
       sealed = Buffer.concat([Buffer.from('RCMCP1'), iv, cipher.getAuthTag(), body]);
