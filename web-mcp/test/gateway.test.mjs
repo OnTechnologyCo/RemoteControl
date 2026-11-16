@@ -109,7 +109,7 @@ test('isolated RemoteControl + public OAuth gateway', {timeout:60000}, async t =
     assert.equal((await exchange(a.code,a.verify)).status,400);
     assert(!JSON.stringify(tokens).includes('fixture-only'));
     assert(!readFileSync(join(work,'clients.json'),'utf8').includes('fixture-only'));
-    for(const event of events) assert.deepEqual(Object.keys(event).sort(),['method','ms','stage','status']);
+    for(const event of events) assert.deepEqual(Object.keys(event).sort(),event.stage === 'register' ? ['method','ms','reason','stage','status'] : ['method','ms','stage','status']);
     assert(events.some(e=>e.stage==='login'&&e.status===200));
     assert(!JSON.stringify(events).includes('fixture-only'));
     assert(!JSON.stringify(events).includes(tokens.access_token));

@@ -1,3 +1,7 @@
+## Gemini 웹 연결 (2026-11-16)
+
+기존 공개 HTTPS `/mcp` 주소에서 Google의 다중 콜백 DCR, 최대 8KiB state와 secret 인증 기반의 갱신 토큰 유지를 지원한다. Gemini의 OAuth client ID/secret 입력란은 관리자 로그인란이 아니다. [연결 방법·인증 경계·검증 범위](../docs/gemini-oauth-20261116.md).
+
 ## Web MCP와 브릿지 (v1.9.7)
 
 현재 연결은 HTTPS/OAuth만 제공합니다. stdio 연결기·MCPB·직접 LAN MCP 연결은 제거되었습니다. 하위 PC는 기존 브릿지 등록과 MCP 사용 설정으로 메인의 Web MCP를 통해 제어합니다. [현재 설정 안내](../docs/webmcp.md), [브릿지 MCP 안내](../docs/mcp-bridge-197.md).

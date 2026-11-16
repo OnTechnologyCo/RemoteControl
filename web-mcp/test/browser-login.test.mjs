@@ -10,7 +10,7 @@ import { randomBytes, createHash } from 'node:crypto';
 import { createGateway, CALLBACK, CIMD, CLAUDE_CALLBACK, CLAUDE_CIMD } from '../gateway.mjs';
 import { browser, delay } from './browser-helper.mjs';
 
-test('real browser form login, OAuth redirect, and authenticated PC status over HTTPS', {timeout:60000}, async t=>{
+for(const google of [false,true]) test(google ? 'Google six-callback DCR and real HTTPS browser login, cancel, manual return and PC status' : 'real browser form login, OAuth redirect, and authenticated PC status over HTTPS', {timeout:60000}, async t=>{
   const root=resolve('../artifacts/web-mcp-test');mkdirSync(root,{recursive:true});
   const work=mkdtempSync(join(root,'browser-')), remote=join(work,'remote');mkdirSync(remote);
   const fixture=spawn(resolve('../artifacts/mcp-test/McpFixture.exe'),[remote],{stdio:['pipe','pipe','pipe'],windowsHide:true});
@@ -23,9 +23,9 @@ test('real browser form login, OAuth redirect, and authenticated PC status over 
   async function freePort(){const s=createServer();s.listen(0,'127.0.0.1');await once(s,'listening');const port=s.address().port;await new Promise(r=>s.close(r));return port;}
   const listenPort=await freePort(),tlsPort=await freePort(),proxyKey=randomBytes(32).toString('base64url');
   const base='https://localhost:'+tlsPort;
-  const hosts=[{id:CIMD,redirect:CALLBACK,name:'ChatGPT'},{id:CLAUDE_CIMD,redirect:CLAUDE_CALLBACK,name:'Claude'}];
+  const hosts=google ? [] : [{id:CIMD,redirect:CALLBACK,name:'ChatGPT'},{id:CLAUDE_CIMD,redirect:CLAUDE_CALLBACK,name:'Claude'}];
   const gateway=createGateway({publicUrl:base,listenPort,lanPort,proxyKey},{directory:work,metadata:async id=>({client_id:id,redirect_uris:[hosts.find(h=>h.id===id).redirect],token_endpoint_auth_method:'none'})});
-  const server=createServer(gateway.app);server.listen(listenPort,'127.0.0.1');await once(server,'listening');
+  const server=createServer({maxHeaderSize:32768},gateway.app);server.listen(listenPort,'127.0.0.1');await once(server,'listening');
   t.after(()=>{gateway.close();server.closeAllConnections();server.close();});
   const caddyFile=join(work,'Caddyfile');
   writeFileSync(caddyFile,`{
@@ -59,12 +59,21 @@ header_up -Forwarded
   let ready=false;for(let i=0;i<100;i++){try{ready=(await send('/')).status===200;if(ready)break;}catch{}await delay(100);}assert(ready);
   // 외부 HTTPS 서버에도 Claude Code 형태의 DCR + HTTP loopback 복귀를 적용한다.
   // 아래 브라우저 interception이 콜백을 소비하므로 인증 코드는 외부로 전송되지 않는다.
+  if(google) {
+    const redirects=['oauth-redirect','oauth-redirect-sandbox','oauth-redirect-test'].flatMap(host=>['r','a'].map(kind=>'https://'+host+'.googleusercontent.com/'+kind+'/browser-fixture'));
+    const registration=await send('/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({redirect_uris:redirects})});
+    assert.equal(registration.status,201,registration.body);
+    const client=JSON.parse(registration.body);assert.equal(client.token_endpoint_auth_method,'client_secret_post');
+    hosts.push({id:client.client_id,secret:client.client_secret,redirect:redirects[4],name:'Google (Gemini)'});
+  } else {
   const nativeCallback='http://localhost:49555/callback';
   const nativeRegistration=await send('/register',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({redirect_uris:[nativeCallback],token_endpoint_auth_method:'none',
       grant_types:['authorization_code','refresh_token'],response_types:['code']})});
   assert.equal(nativeRegistration.status,201,nativeRegistration.body);
   hosts.push({id:JSON.parse(nativeRegistration.body).client_id,redirect:nativeCallback,name:'로컬 MCP 클라이언트'});
+  }
+  const state=google ? 'opaque+'.repeat(250)+'&%한글🙂' : 'isolated-browser-test';
   const chrome=await browser(join(work,'profile'));t.after(()=>chrome.close());
   // This new browser profile is used only for the self-signed loopback fixture.
   await chrome.command('Security.setIgnoreCertificateErrors',{ignore:true});
@@ -92,7 +101,7 @@ header_up -Forwarded
     callback=null;blocked=false;origin=null;callbackReferer=null;returned=false;
     await chrome.command('Emulation.setScriptExecutionDisabled',{value:mode==='manual'});
     const verifier=randomBytes(32).toString('base64url');
-    const url=base+'/authorize?'+new URLSearchParams({client_id:host.id,redirect_uri:host.redirect,response_type:'code',state:'isolated-browser-test',code_challenge:createHash('sha256').update(verifier).digest('base64url'),code_challenge_method:'S256',scope:'remotecontrol',resource:base+'/mcp'});
+    const url=base+'/authorize?'+new URLSearchParams({client_id:host.id,redirect_uri:host.redirect,response_type:'code',state,code_challenge:createHash('sha256').update(verifier).digest('base64url'),code_challenge_method:'S256',scope:'remotecontrol',resource:base+'/mcp'});
     await chrome.command('Page.navigate',{url});
     let loaded=false;for(let i=0;i<100;i++){if(await chrome.evaluate('!!document.querySelector("button[value=allow]")')){loaded=true;break;}await delay(100);}assert(loaded,'Browser must load actual login HTML');
     assert((await chrome.evaluate('document.querySelector("h1").textContent')).startsWith(host.name));
@@ -107,10 +116,10 @@ header_up -Forwarded
     assert.equal(blocked,false,'CSP must allow the exact OAuth callback after form POST');
     assert(callback,mode+': Browser must follow the OAuth redirect');assert.equal(callbackReferer,undefined,'No referrer may be sent to ChatGPT');
     assert(returned,'Host redirect after the callback must not inherit the login form restriction');
-    assert.equal(callback.searchParams.get('iss'),base+'/');assert.equal(callback.searchParams.get('state'),'isolated-browser-test');
+    assert.equal(callback.searchParams.get('iss'),base+'/');assert.equal(callback.searchParams.get('state'),state);
     assert.equal(callback.origin+callback.pathname,host.redirect);
     if(decision==='deny'){assert.equal(callback.searchParams.get('error'),'access_denied');continue;}
-    const tokenReply=await send('/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'authorization_code',client_id:host.id,code:callback.searchParams.get('code'),code_verifier:verifier,redirect_uri:host.redirect,resource:base+'/mcp'}).toString()});
+    const tokenReply=await send('/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'authorization_code',client_id:host.id,...(host.secret?{client_secret:host.secret}:{}),code:callback.searchParams.get('code'),code_verifier:verifier,redirect_uri:host.redirect,resource:base+'/mcp'}).toString()});
     assert.equal(tokenReply.status,200,tokenReply.body);const tokens=JSON.parse(tokenReply.body);
     const rpc=async(id,method,params)=>{
       const r=await send('/mcp',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+tokens.access_token},body:JSON.stringify({jsonrpc:'2.0',id,method,params})});
@@ -120,6 +129,11 @@ header_up -Forwarded
     const list=await rpc(2,'tools/list',{});assert(list.tools.some(t=>t.name==='pc_get_status'));
     const status=await rpc(3,'tools/call',{name:'pc_get_status',arguments:{}});assert(!status.isError);
     const pc=JSON.parse(status.content[0].text);assert(pc.hostname);
+    if(google) {
+      const refreshed=await send('/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
+        body:new URLSearchParams({grant_type:'refresh_token',client_id:host.id,client_secret:host.secret,refresh_token:tokens.refresh_token,resource:base+'/mcp'}).toString()});
+      assert.equal(refreshed.status,200,refreshed.body);assert.equal(JSON.parse(refreshed.body).refresh_token,tokens.refresh_token);
+    }
     writeFileSync(join(work,host.name+'-'+mode+'-result.json'),JSON.stringify({client:host.name,browserOrigin:origin,oauthCallbackAllowed:true,crossOriginReferrerOmitted:true,toolCount:list.tools.length,pcStatusSucceeded:true},null,2));
   }
   }

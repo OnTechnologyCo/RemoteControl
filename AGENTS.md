@@ -1,3 +1,12 @@
+## Gemini 웹 OAuth와 버전 설치 파일 (v1.9.13)
+
+- Google의 정확한 oauth-redirect, oauth-redirect-sandbox, oauth-redirect-test.googleusercontent.com HTTPS /r/<id>, /a/<id>만 허용한다. DCR은 Google에 한해 고유 URI 1~6개를 받으며 SDK 정규화 전에도 검사한다. 승인 URI는 등록 문자열과, 코드 교환 URI는 실제 승인 URI와 일치해야 한다.
+- state는 UTF-8 8KiB까지 불투명하게 유지한다. 10분/128개 승인 대기는 기존 AES-GCM 저장소에 보존하고 전체 2MiB 쓰기 한도와 저장 실패 롤백을 유지한다. 로그인·CSRF·PKCE·resource/scope 검사를 완화하지 않는다.
+- client_secret_post로 인증하는 Google 클라이언트만 refresh token을 유지한다. 공개 Google·ChatGPT·Claude는 기존 회전·재사용 감지를 유지한다. register 진단에는 고정 reason만 기록한다.
+- 실제 요청 근거 없이 Google CIMD, client_secret_basic, Origin/CORS 허용을 추가하지 않는다. LAN의 루프백 콜백 정책은 그대로다.
+- 빌드_setup.ps1은 본체/Setup 버전 일치를 확인하고 RemoteControl_Setup_v<Version>.exe를 만든다. 고정 이름 사본은 기존 검사 호환용이며 두 파일의 해시가 같아야 한다. build manifest에 둘 다 기록한다.
+- web-mcp/test/gemini.test.mjs와 실제 격리 HTTPS 브라우저 검사를 유지한다. 테스트의 Google 콜백 가로채기는 실제 Gemini 계정 연결 성공을 의미하지 않는다.
+
 ## FHD 미만 해상도 차단 (v1.9.12)
 
 - 원격에서 바꾸는 화면 크기는 `Display.Allowed`(가로 ≥ 1920, 세로 ≥ 1080)만 허용한다. 웹 목록(`Display.Choices`), 설정 창 목록, 서버 `screen` 요청, 저장값 복원(`Display.Target`)에 모두 같은 기준을 쓴다. 서버는 거부할 때 `note`로 이유를 보낸다.

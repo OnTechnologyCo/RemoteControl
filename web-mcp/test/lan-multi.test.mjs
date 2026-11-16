@@ -164,7 +164,7 @@ test('LAN multiple IPs isolate OAuth and transfers and preserve sessions across 
     assert.equal((await f.form(second,'/revoke',{client_id:other.client.client_id,token:other.tokens.refresh_token,token_type_hint:'refresh_token'})).status,200);
     assert.equal((await f.ping(second,other.tokens)).status,401);assert.equal((await f.ping(primary,first.tokens)).status,200);
     f.restart(config);assert.equal((await f.ping(primary,first.tokens)).status,200);assert.equal((await f.ping(second,other.tokens)).status,403);
-    for(const event of f.events)assert.deepEqual(Object.keys(event).sort(),['method','ms','stage','status']);
+    for(const event of f.events)assert.deepEqual(Object.keys(event).sort(),event.stage === 'register' ? ['method','ms','reason','stage','status'] : ['method','ms','stage','status']);
     assert(!JSON.stringify(f.events).includes(first.tokens.access_token));assert(!JSON.stringify(f.events).includes('fixture-only'));
   });
 });

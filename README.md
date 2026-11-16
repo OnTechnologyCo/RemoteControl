@@ -1,4 +1,12 @@
-# 원격제어 v1.9.12
+# 원격제어 v1.9.13
+
+## v1.9.13 Gemini 웹 MCP 연결
+
+Google 콜백 최대 6개를 한 번에 등록하고 긴 OAuth state를 보존합니다. 로그인 승인 대기는 암호화 저장소에서 재시작 후 복구하며, secret 인증을 사용하는 Google 클라이언트는 갱신 토큰을 유지합니다. 기존 ChatGPT·Claude·로컬 클라이언트의 인증 검사는 유지합니다.
+
+설치 파일은 dist/RemoteControl_Setup_v1.9.13.exe입니다. 빌드할 때 실제 본체 버전을 파일명에 자동으로 붙입니다. 설치 검사 호환용 RemoteControl_Setup.exe도 같은 내용으로 생성합니다.
+
+[Gemini 연결 방법](docs/gemini-oauth-20261116.md) · [검증 기록](docs/gemini-oauth-validation-20261116.md)
 
 ## v1.9.12 FHD 미만 해상도 차단
 
@@ -115,7 +123,7 @@ MCP 인증은 원격제어·웹 중계 재시작과 일시적인 통신 장애 �
 | 파일 | 용도 |
 |---|---|
 | `dist\RemoteControl.exe` | 프로그램 본체 |
-| `dist\RemoteControl_Setup.exe` | 공유할 PC 설치·업데이트용 setup |
+| `dist\RemoteControl_Setup_v1.9.13.exe` | 공유할 PC 설치·업데이트용 setup |
 | `dist\RemoteControl_WebPlugin.zip` | HTTPS/OAuth MCP 연결 플러그인 |
 
 프로젝트 폴더에서 아래 명령 하나로 본체와 setup을 함께 갱신합니다.
@@ -130,7 +138,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\빌드_setup.ps1
 
 빌드는 설치된 서비스를 중지하지 않으며 관리자 권한도 요구하지 않습니다. `dist`의 파일을 직접 실행 중이어서 덮어쓸 수 없으면 그 실행본을 종료한 뒤 다시 빌드하세요.
 
-실제 업데이트는 **`dist\RemoteControl_Setup.exe`**를 실행해 진행합니다. 설치 시 관리자 권한을 요청하고 원격제어 프로그램·서비스를 다시 시작합니다. 빌드만으로 `C:\Program Files\RemoteControl`의 설치본이 업데이트되지는 않습니다. 기존 프로그램이 떠 있으면 새 exe를 실행해도 중복 실행 방지 때문에 기존 창이 열릴 수 있습니다.
+실제 업데이트는 **`dist\RemoteControl_Setup_v1.9.13.exe`**를 실행해 진행합니다. 설치 시 관리자 권한을 요청하고 원격제어 프로그램·서비스를 다시 시작합니다. 빌드만으로 `C:\Program Files\RemoteControl`의 설치본이 업데이트되지는 않습니다. 기존 프로그램이 떠 있으면 새 exe를 실행해도 중복 실행 방지 때문에 기존 창이 열릴 수 있습니다.
 
 ## 변경 내용
 

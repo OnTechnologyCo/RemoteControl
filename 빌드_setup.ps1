@@ -209,9 +209,13 @@ if ($vddArg.Count -gt 0) { $innoArgs += '/DHasVdd=1' }
 $innoArgs += Join-Path $root 'installer\RemoteControl.iss'
 & $iscc @innoArgs
 if ($LASTEXITCODE -ne 0) { throw 'Inno Setup 컴파일 실패' }
-$fi = Get-Item $out
+# 검증용 고정 경로는 유지하고 배포 파일에는 본체와 일치하는 버전을 붙인다.
+$versionedOut = Join-Path $buildDir ('RemoteControl_Setup_v' + $versionMatch.Groups[1].Value + '.exe')
+Copy-Item -LiteralPath $out -Destination $versionedOut -Force
+if ((Get-FileHash -LiteralPath $out).Hash -ne (Get-FileHash -LiteralPath $versionedOut).Hash) { throw '버전 설치 파일 해시 불일치' }
+$fi = Get-Item $versionedOut
 "Inno 설치 파일 완료  {0:N2} MB  {1:HH:mm:ss}" -f ($fi.Length / 1MB), $fi.LastWriteTime
-"설치 파일 경로: $out"
+"설치 파일 경로: $versionedOut"
 
 # 배포물을 만든 소스와 포함된 바이너리를 해시로 연결한다. 설치나 서비스 재시작은 하지 않는다.
 & (Join-Path $root 'build\Write-BuildManifest.ps1') -Root $root -InnoCompiler $iscc
