@@ -112,10 +112,19 @@ namespace RemoteControl
 
                 case "--admin-ui":
                     if (!RemoteControlSecrets.ConfigProtection.IsAdministrator) return 5;
-                    Config.EnsureWritable();
-                    administratorWindow = true;
-                    Native.MakeDpiAware(); Application.EnableVisualStyles();
-                    Application.Run(new MainForm(false)); return 0;
+                    SettingsWindow.Initialize();
+                    return SettingsWindow.Run("Admin", delegate {
+                        Config.EnsureWritable(); administratorWindow = true;
+                        return new MainForm(false);
+                    });
+
+                case "--mcp-settings":
+                    if (!RemoteControlSecrets.ConfigProtection.IsAdministrator) return 5;
+                    SettingsWindow.Initialize();
+                    return SettingsWindow.Run("Mcp", delegate {
+                        Config.EnsureWritable();
+                        return new McpForm(ReadServiceMcpStatus) { StartPosition = FormStartPosition.CenterScreen };
+                    });
 
                 case "--mcp-job":
 
@@ -218,7 +227,7 @@ namespace RemoteControl
 
             // 배율이 걸린 화면에서 좌표가 어긋나지 않게 가장 먼저 선언한다.
 
-            Native.MakeDpiAware();
+            SettingsWindow.Initialize();
 
 
 
@@ -258,9 +267,7 @@ namespace RemoteControl
 
 
 
-                Application.EnableVisualStyles();
 
-                Application.SetCompatibleTextRenderingDefault(false);
 
 
 
@@ -308,7 +315,7 @@ namespace RemoteControl
 
         /// <summary>이 프로그램의 판 번호. 창 제목과 머리글에 보인다.</summary>
 
-        internal const string Version = "1.9.13";
+        internal const string Version = "1.9.14";
 
 
 
@@ -526,7 +533,7 @@ namespace RemoteControl
 
 
 
-        private static Icon LoadIcon(string name)
+        internal static Icon LoadIcon(string name)
 
         {
 
@@ -900,15 +907,7 @@ namespace RemoteControl
             // ---- 외부망 ----
 
             var mcpLink = new LinkLabel { Text = "Web MCP 설정 · HTTPS / OAuth 연결", Location = new Point(14,132), Size = new Size(490,20), Font = fS, LinkColor = Color.FromArgb(34,211,238) };
-            mcpLink.LinkClicked += delegate { if (!RequireAdminSettings()) return; using(var form=new McpForm(delegate {
-
-                if(!svcMode)return server.McpNote;
-
-                var st=Agent.ReadStatus();if(st==null)return "원격제어 서비스 상태를 확인하세요.";
-
-                return string.IsNullOrEmpty(st.McpNote)?"실행 중인 서비스에 MCP 상태 정보가 없습니다. 새 setup으로 업데이트하세요.":st.McpNote;
-
-            }))form.ShowDialog(this); };
+            mcpLink.LinkClicked += delegate { OpenMcpSettings(); };
 
             g.Controls.Add(mcpLink);
 
@@ -1749,6 +1748,25 @@ namespace RemoteControl
         // ---------------------------------------------------------------- 동작
 
 
+
+        private static string ReadServiceMcpStatus()
+        {
+            var state = Agent.ReadStatus();
+            if (state == null) return "원격제어 서비스 상태를 확인하세요.";
+            return string.IsNullOrEmpty(state.McpNote) ? "실행 중인 서비스에 MCP 상태 정보가 없습니다." : state.McpNote;
+        }
+
+        private void OpenMcpSettings()
+        {
+            if (SettingsWindow.TryActivate("Mcp")) return;
+            if (!RemoteControlSecrets.ConfigProtection.IsAdministrator)
+            {
+                try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Assembly.GetExecutingAssembly().Location, "--mcp-settings") { UseShellExecute = true, Verb = "runas" }); }
+                catch (Exception ex) { MessageBox.Show(this, "Web MCP 설정 창을 열지 못했습니다: " + ex.Message); }
+                return;
+            }
+            SettingsWindow.Run("Mcp", delegate { return new McpForm(delegate { return svcMode ? ReadServiceMcpStatus() : server.McpNote; }); }, this);
+        }
 
         private bool RequireAdminSettings()
         {

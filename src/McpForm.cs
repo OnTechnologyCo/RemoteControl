@@ -17,10 +17,10 @@ namespace RemoteControl
         private readonly System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer();
         internal McpForm(Func<string> getStatus)
         {
-            readStatus=getStatus;Text="Web MCP 설정";ClientSize=new Size(620,550);
+            readStatus=getStatus;Text="Web MCP 설정";ClientSize=new Size(620,550);Icon=MainForm.LoadIcon("remotecontrol.ico");
             Font=new Font("맑은 고딕",9);StartPosition=FormStartPosition.CenterParent;FormBorderStyle=FormBorderStyle.FixedDialog;MaximizeBox=false;MinimizeBox=false;
             Config.Reload();McpOptions o=McpOptions.Load();
-            LabelAt("ChatGPT, Claude, Codex는 HTTPS /mcp 주소로 연결합니다.\r\n연결 화면에서 원격제어 ID와 비밀번호로 로그인하세요.",20,18,580,48);
+            LabelAt("ChatGPT, Claude, Gemini, Codex는 HTTPS /mcp 주소로 연결합니다.\r\n연결 화면에서 원격제어 ID와 비밀번호로 로그인하세요.",20,18,580,48);
             enabled=new CheckBox{Text="이 PC의 Web MCP 사용 · 프로그램 시작 시 자동 실행",Checked=o.Enabled,Location=new Point(20,76),AutoSize=true};Controls.Add(enabled);
             LabelAt("기본 작업공간 (접근 제한 아님 · 첫 줄은 기본 실행 위치)",20,118,580,23);
             workspaces=new TextBox{Text=string.Join("\r\n",o.Workspaces),Multiline=true,ScrollBars=ScrollBars.Vertical,Location=new Point(20,146),Size=new Size(580,94)};Controls.Add(workspaces);
@@ -72,6 +72,6 @@ namespace RemoteControl
                 status.Text="저장했습니다. 실행 중인 Web MCP에 수 초 이내 반영됩니다.";
             }catch(Exception ex){MessageBox.Show(this,ex.Message,"Web MCP 설정",MessageBoxButtons.OK,MessageBoxIcon.Information);}
         }
-        protected override void Dispose(bool disposing){if(disposing)timer.Dispose();base.Dispose(disposing);}
+        protected override void Dispose(bool disposing){if(disposing){timer.Dispose();if(Icon!=null)Icon.Dispose();}base.Dispose(disposing);}
     }
 }

@@ -40,7 +40,8 @@ foreach ($name in 'RemoteControl.exe','RemoteControl_WebMCP.zip') {
         throw "Embedded payload does not match this build: $name"
     }
 }
-$outputs = @(Get-ChildItem -LiteralPath $dist -File | Where-Object {$_.Extension -in @('.exe','.zip','.mcpb')} | ForEach-Object {
+$versionedSetup = "RemoteControl_Setup_v" + (Get-Item -LiteralPath (Join-Path $dist "RemoteControl.exe")).VersionInfo.ProductVersion + ".exe"
+$outputs = @(Get-ChildItem -LiteralPath $dist -File | Where-Object {($_.Name -notlike "RemoteControl_Setup_v*.exe" -or $_.Name -ceq $versionedSetup) -and $_.Extension -in @('.exe','.zip','.mcpb')} | ForEach-Object {
     $signature = Get-AuthenticodeSignature -LiteralPath $_.FullName
     [ordered]@{Name=$_.Name;Length=$_.Length;SHA256=(Get-FileHash -LiteralPath $_.FullName).Hash;Signature=$signature.Status.ToString();Signer=$signature.SignerCertificate.Subject}
 })

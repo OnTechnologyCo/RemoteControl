@@ -1,3 +1,9 @@
+## v1.9.14 dedicated Web MCP settings window
+
+Opening Web MCP settings from an ordinary-user window now opens the dedicated elevated settings dialog instead of another main window. Repeated clicks activate the existing settings window. Administrator settings are also limited to one window per session.
+
+All UI entry points share DPI and text-rendering initialization, fixing missing icon/status glyphs in the elevated main window. MCP settings use the embedded application icon. Installer: dist/RemoteControl_Setup_v1.9.14.exe. See [cause and validation](docs/mcp-settings-window-1914.md).
+
 ## v1.9.13 Gemini web MCP OAuth
 
 Supports registration of up to six exact Google callbacks, opaque state up to 8 KiB, encrypted pending-approval recovery after restart, and persistent refresh tokens for secret-authenticated Google clients. Existing ChatGPT, Claude, native-loopback and LAN authentication rules remain in place.
