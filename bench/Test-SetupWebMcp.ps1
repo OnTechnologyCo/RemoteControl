@@ -44,7 +44,7 @@ $stage.Invoke($null,[string[]]@($dest,'https://najhna.dyndns.org:59334')) | Out-
 
 $plugin=Join-Path $dest 'plugins\RemoteControl_WebPlugin.zip'
 
-foreach($path in @('plugins\RemoteControl_WebPlugin.zip','plugins\웹-ChatGPT-업로드-안내.txt','web-mcp\node.exe','web-mcp\caddy.exe','web-mcp\Install-WebMcp.ps1','web-mcp\gateway.mjs','web-mcp\auth-state.mjs','web-mcp\transfers.mjs','web-mcp\transfer-client.mjs','web-mcp\sha256.mjs','web-mcp\node_modules\@modelcontextprotocol\sdk\package.json')) {
+foreach($path in @('plugins\RemoteControl_WebPlugin.zip','plugins\웹-ChatGPT-업로드-안내.txt','web-mcp\node.exe','web-mcp\caddy.exe','web-mcp\Install-WebMcp.ps1','web-mcp\gateway.mjs','web-mcp\auth-state.mjs','web-mcp\transfers.mjs','web-mcp\transfer-client.mjs','web-mcp\sha256.mjs','web-mcp\gemini-hints.mjs','web-mcp\web-tools.json','web-mcp\node_modules\@modelcontextprotocol\sdk\package.json')) {
 
     if(-not(Test-Path -LiteralPath (Join-Path $dest $path))){throw "설치 파일 배치 누락: $path"}
 
@@ -58,7 +58,7 @@ $packagedInstaller = (Get-FileHash -LiteralPath (Join-Path $dest 'web-mcp\Instal
 
 if($packagedInstaller -cne (Get-FileHash -LiteralPath (Join-Path $root 'web-mcp\Install-WebMcp.ps1') -Algorithm SHA256).Hash){throw 'Setup에 현재 HTTPS 설치 수정 소스가 포함되지 않았습니다.'}
 
-foreach($name in @('transfers.mjs','transfer-client.mjs','sha256.mjs','WebMcpConfig.ps1','check-certificate.mjs','server.mjs','tailscale-server.mjs','private-server.mjs','Install-PrivateMcp.ps1','Disable-PrivateMcp.ps1','Install-TailscaleMcp.ps1','Disable-TailscaleMcp.ps1')){
+foreach($name in @('transfers.mjs','transfer-client.mjs','sha256.mjs','gemini-hints.mjs','web-tools.json','WebMcpConfig.ps1','check-certificate.mjs','server.mjs','tailscale-server.mjs','private-server.mjs','Install-PrivateMcp.ps1','Disable-PrivateMcp.ps1','Install-TailscaleMcp.ps1','Disable-TailscaleMcp.ps1')){
     if((Get-FileHash -LiteralPath (Join-Path $dest ('web-mcp\'+$name))).Hash -cne (Get-FileHash -LiteralPath (Join-Path $root ('web-mcp\'+$name))).Hash){throw "Setup에 최신 파일 누락: $name"}
 
 }
@@ -67,17 +67,24 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 # 압축 해제만 검사하면 실제 설치의 복사 목록 누락을 놓친다. 서비스는 실행하지 않고
 # 설치 스크립트의 실제 Copy-Item 블록을 격리 폴더에서 실행해 모듈 의존성을 확인한다.
-foreach($installer in @('Install-WebMcp.ps1','Install-TailscaleMcp.ps1','Install-PrivateMcp.ps1')) {
+foreach($installer in @('Install-WebMcp.ps1','Install-TailscaleMcp.ps1','Install-PrivateMcp.ps1','Install-LanWebMcp.ps1')) {
     $packageRoot=Join-Path $dest 'web-mcp'
     $appDir=Join-Path $dest ($installer+'.runtime')
     [void][IO.Directory]::CreateDirectory($appDir)
     $tokens=$null;$parseErrors=$null
     $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $packageRoot $installer),[ref]$tokens,[ref]$parseErrors)
     if($parseErrors.Count){throw "설치 스크립트 구문 오류: $installer"}
-    $copies=@($ast.FindAll({param($node) $node -is [Management.Automation.Language.ForEachStatementAst] -and $node.Extent.Text.Contains('Copy-Item') -and $node.Extent.Text.Contains("'gateway.mjs'")},$true))
+    if($installer -eq 'Install-LanWebMcp.ps1') {
+        $fileList=@($ast.FindAll({param($node) $node -is [Management.Automation.Language.AssignmentStatementAst] -and $node.Left.Extent.Text -eq '$files'},$true))
+        if($fileList.Count -ne 1){throw 'LAN package file list missing'}
+        . ([scriptblock]::Create($fileList[0].Extent.Text))
+        $copies=@($ast.FindAll({param($node) $node -is [Management.Automation.Language.ForEachStatementAst] -and $node.Extent.Text.Contains('Copy-Item') -and $node.Condition.Extent.Text -eq '$files'},$true))
+    } else {
+        $copies=@($ast.FindAll({param($node) $node -is [Management.Automation.Language.ForEachStatementAst] -and $node.Extent.Text.Contains('Copy-Item') -and $node.Extent.Text.Contains("'gateway.mjs'")},$true))
+    }
     if($copies.Count -ne 1){throw "실행 파일 복사 블록을 확인할 수 없습니다: $installer"}
     & ([scriptblock]::Create($copies[0].Extent.Text.Replace('$PSScriptRoot','$packageRoot')))
-    foreach($module in @('gateway.mjs','auth-state.mjs','transfers.mjs','transfer-client.mjs','sha256.mjs')) {
+    foreach($module in @('gateway.mjs','auth-state.mjs','transfers.mjs','transfer-client.mjs','sha256.mjs','gemini-hints.mjs','web-tools.json')) {
         if(-not(Test-Path -LiteralPath (Join-Path $appDir $module))){throw "실제 설치 복사 누락: $installer / $module"}
     }
     Push-Location $appDir

@@ -24,6 +24,7 @@ $res = @(
     "web\viewer.html,viewer.html"
     "web\viewer.js,viewer.js"
     "web-mcp\sha256.mjs,sha256.mjs"
+    "web-mcp\web-tools.json,web-tools.json"
     "web\upload-chunks.js,upload-chunks.js"
     "web\media.js,media.js"
     "web\jpeg-worker.js,jpeg-worker.js"

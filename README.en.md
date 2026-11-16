@@ -1,3 +1,9 @@
+## v1.9.15 per-tool Gemini readOnlyHint settings
+
+The elevated Web MCP settings dialog now offers Default / true / false for the actual native and web tool catalog, with Save, Cancel and staged Reset. Overrides apply only to authenticated OAuth clients whose registered callbacks all match the existing Google allowlist. Actual tool behavior, permissions and other annotations remain unchanged. Defaults and overrides are disclosed in tool metadata and descriptions.
+
+After saving, sync the Gemini tool schema and check App actions permissions. Gemini permission persistence and actual account behavior require separate verification. Installer: `dist/RemoteControl_Setup_v1.9.15.exe`. See [usage](docs/gemini-readonly-hints.md) and [validation](docs/gemini-readonly-validation-20261116.md).
+
 ## v1.9.14 dedicated Web MCP settings window
 
 Opening Web MCP settings from an ordinary-user window now opens the dedicated elevated settings dialog instead of another main window. Repeated clicks activate the existing settings window. Administrator settings are also limited to one window per session.

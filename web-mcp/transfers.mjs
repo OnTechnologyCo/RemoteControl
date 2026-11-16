@@ -7,7 +7,7 @@ const random=()=>randomBytes(32).toString('base64url');
 const same=(a,b)=>typeof a==='string'&&typeof b==='string'&&Buffer.byteLength(a)===Buffer.byteLength(b)&&timingSafeEqual(Buffer.from(a),Buffer.from(b));
 const html=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const allowed=new Set(['pc_get_status','pc_get_file_info','pc_list_directory','pc_begin_upload','pc_write_upload_chunk','pc_finish_upload','pc_get_transfer_status','pc_cancel_transfer','pc_prepare_download']);
-export const fileTool={name:'pc_open_file_transfer',description:'Open the authenticated browser file/folder upload and download page. Return its URL to the user. Uses the current WebMCP login; no local connector install. The link expires in five minutes and is single use. Browser chunks and MCP transfer tools use the same verified remote storage.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true,destructiveHint:false,idempotentHint:false,openWorldHint:false}};
+export const fileTool=JSON.parse(readFileSync(new URL('./web-tools.json',import.meta.url),'utf8'));
 export function attachTransfers(app,provider,config,now=Date.now){
   const links=new Map(),sessions=new Map();
   const sweep=()=>{for(const table of [links,sessions])for(const [key,row]of table)if(row.until<=now()||row.grant.revoked)table.delete(key);};

@@ -1,3 +1,12 @@
+## Gemini readOnlyHint 관리자 설정 (v1.9.15)
+
+- GeminiSettings는 기존 보호된 Config의 mcp_gemini_readonly_hints에 boolean 맵을 저장한다. 미설정과 false를 구분하고 16KiB·실제 도구 이름·JSON boolean을 검증한다. 저장 성공 전 실행 맵을 바꾸지 않는다. 삭제된 도구 키는 복원 시 무시하고 다음 저장에서 정리한다.
+- 관리자 Web MCP 전용 창에서 GeminiSettingsForm을 연다. 실제 McpTools.List와 공용 web-mcp/web-tools.json을 사용한다. 기본값 복원은 저장 전까지 임시 편집이며 취소는 저장하지 않는다. 설정 화면 진입으로 MCP를 켜지 않는다.
+- 게이트웨이는 인증된 grant와 서버 등록의 Google 콜백 전체를 검사한다. Origin/User-Agent/client_name/clientInfo로 범위를 판단하지 않는다. Google 콜백 범위는 특정 Gemini 제품의 신원 증명이 아니다.
+- 내부 tools/list 스냅샷 메타데이터는 외부 응답에서 제거한다. 도구·annotations·_meta는 분리된 복사본이며 readOnlyHint 외 어노테이션, 스키마, securitySchemes와 실행 정책은 유지한다. 실제 동작과 다른 값에는 설명과 원래 값/사용자 지정 표식을 남긴다. listChanged:false를 유지한다.
+- 새 모듈과 web-tools.json을 본체 리소스, Web MCP 패키지와 네 설치 복사 목록에 함께 유지한다. 본체/게이트웨이를 함께 배포한다. Gemini Always allow는 사용자 계정에서 별도 확인하며 서버 시험으로 성공을 주장하지 않는다.
+- bench/Test-GeminiSettings.ps1의 격리 ACL 대역 시험과 web-mcp/test/gemini-hints.test.mjs의 인증 HTTP 시험을 실제 관리자 설치/Google 계정 검증과 구분한다. 상세: docs/gemini-readonly-hints.md.
+
 ## Web MCP 전용 설정 창 (v1.9.14)
 
 - 메인 Web MCP 링크는 OpenMcpSettings를 통해 --mcp-settings 관리자 진입점을 사용한다. 링크를 RequireAdminSettings/--admin-ui로 돌려 메인 창·트레이·서버를 추가 생성하지 않는다.

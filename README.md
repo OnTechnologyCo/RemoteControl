@@ -1,4 +1,12 @@
-# 원격제어 v1.9.14
+# 원격제어 v1.9.15
+
+## v1.9.15 Gemini 도구별 readOnlyHint 설정
+
+Web MCP → Gemini 커넥터 설정에서 실제 27개 도구의 기본값 / true / false를 저장·취소·복원할 수 있습니다. 검증된 Google 콜백만 등록한 OAuth 연결에 적용하며 도구의 동작·실행 권한·나머지 어노테이션은 유지합니다. 변경한 값과 실제 기본 동작이 다르면 화면과 도구 설명에 표시합니다.
+
+저장 후 Gemini의 Tool schemas → Sync schema와 App actions → Always allow를 확인하세요. 서버 메타데이터와 Gemini의 권한 저장은 별개이며 실제 계정 검증은 아직 수행하지 않았습니다.
+
+설치 파일: `dist/RemoteControl_Setup_v1.9.15.exe`. [사용 안내](docs/gemini-readonly-hints.md) · [검증 기록](docs/gemini-readonly-validation-20261116.md).
 
 ## v1.9.14 Web MCP 설정 창과 아이콘 표시 수정
 

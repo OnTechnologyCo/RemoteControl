@@ -1,3 +1,9 @@
+## Gemini readOnlyHint 설정 (v1.9.15)
+
+본체와 게이트웨이를 함께 업데이트한 뒤 Web MCP → Gemini 커넥터 설정에서 도구별 기본값 / true / false를 선택하고 저장한다. 모두 기본값으로는 저장해야 확정된다. 기존 관리자 저장 경로를 사용하며 원격 설정 변경 도구는 없다.
+
+검증된 Google 콜백만 등록한 인증 연결에만 적용된다. 실제 실행·부작용·권한은 유지하며, 기본 동작과 다른 값은 도구 설명과 remotecontrol/ 메타데이터에 표시된다. Gemini에서 Tool schemas → Sync schema 후 Raw schema를 확인하고 App actions의 Always allow를 별도로 선택한다. 확인창 제거나 권한 유지가 보장되는 것은 아니다. [사용 안내](../docs/gemini-readonly-hints.md).
+
 ## Gemini 웹 연결 (2026-11-16)
 
 기존 공개 HTTPS `/mcp` 주소에서 Google의 다중 콜백 DCR, 최대 8KiB state와 secret 인증 기반의 갱신 토큰 유지를 지원한다. Gemini의 OAuth client ID/secret 입력란은 관리자 로그인란이 아니다. [연결 방법·인증 경계·검증 범위](../docs/gemini-oauth-20261116.md).

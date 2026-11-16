@@ -43,11 +43,13 @@ namespace RemoteControl
         internal int Port = 5901;
         internal string[] Workspaces = new string[0];
         internal string CredentialStamp = "";
+        internal string GeminiReadOnlyHints = "";
         // 배포한 사용자 프로그램은 RemoteControl 제거 시 지우는 설정 폴더 밖에 둔다.
         internal static string DefaultWorkspace { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonDocuments), "RemoteControlDeploy"); } }
         internal static McpOptions Load()
         {
             var o = new McpOptions(); o.Enabled = Config.Get("mcp_enabled") == "1";
+            o.GeminiReadOnlyHints = Config.Get(GeminiSettings.Key);
             o.CredentialStamp = Config.User + "|" + Config.Get("pwhash");
             int port; if (int.TryParse(Config.Get("mcp_port"), out port)) o.Port = port;
             o.AllowCommands = Config.Get("mcp_commands") != "0"; o.AllowScreen = Config.Get("mcp_screen") != "0";

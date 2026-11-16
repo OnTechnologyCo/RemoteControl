@@ -6,7 +6,7 @@ $native = Join-Path $root 'artifacts\control-test\Native.cs'
 if (-not (Test-Path -LiteralPath $native)) { & (Join-Path $PSScriptRoot 'Test-Control.ps1') }
 $src = Get-ChildItem (Join-Path $root 'src') -Filter *.cs | Where-Object { $_.Name -notin @('Native.cs','DesktopDup.cs','Desktops.cs') } | ForEach-Object FullName
 $exe = Join-Path $dest 'McpFixture.exe'
-& 'C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe' /nologo /unsafe /optimize+ /target:exe /platform:x64 /langversion:5 "/out:$exe" /main:RemoteControl.McpFixture `
+& 'C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe' /nologo /unsafe /optimize+ /target:exe /platform:x64 /langversion:5 "/out:$exe" /main:RemoteControl.McpFixture "/resource:$(Join-Path $root 'web-mcp\web-tools.json'),web-tools.json" `
     /r:System.dll /r:System.Core.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll /r:System.ServiceProcess.dll /r:System.Security.dll /r:System.Web.Extensions.dll /r:System.IO.Compression.dll `
     $native (Join-Path $PSScriptRoot 'ControlTest.cs') (Join-Path $PSScriptRoot 'McpFixture.cs') (Join-Path $PSScriptRoot 'McpSessionsTest.cs') $src
 if ($LASTEXITCODE -ne 0) { throw 'MCP fixture compilation failed' }

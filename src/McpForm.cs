@@ -43,6 +43,7 @@ namespace RemoteControl
                     Process.Start(new ProcessStartInfo("explorer.exe",McpProcesses.Quote(folder)){UseShellExecute=true});
                 }catch(Exception ex){MessageBox.Show(this,ex.Message,"공개 CA");}
             });
+            AddButton("Gemini 커넥터 설정",20,509,250,delegate{try{using(var form=new GeminiSettingsForm())form.ShowDialog(this);}catch(Exception ex){MessageBox.Show(this,ex.Message,"Gemini 설정");}});
             AddButton("저장",400,509,95,Save);AddButton("닫기",505,509,95,delegate{Close();});
         }
         private void OpenSetup(string mode)

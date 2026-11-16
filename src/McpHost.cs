@@ -106,7 +106,10 @@ namespace RemoteControl
                     string protocol=Json.Str(args,"protocolVersion");if(Array.IndexOf(new[]{"2025-11-25","2025-06-18","2025-03-26","2024-11-05"},protocol)<0)protocol="2025-11-25";
                     response=McpJson.Result(id,new{protocolVersion=protocol,capabilities=new{tools=new{listChanged=false}},serverInfo=new{name="RemoteControl Web backend",version=MainForm.Version},instructions="Use pc_get_status to verify the remote hostname before changes. File paths are on the remote PC. Workspace directories are default working locations, not access restrictions. Any absolute local path may be used subject to the remote Windows account permissions and path validation. Never infer permission denial from a path being outside a workspace; check the actual tool response. NOT_FOUND and INVALID_ARGUMENT do not mean ACCESS_DENIED. File and folder transfers use pc_begin_upload, pc_write_upload_chunk, pc_finish_upload, pc_prepare_download and pc_read_download_chunk with SHA-256 validation. Commands run with the remote agent's Windows rights. Keep output concise; use logs and screenshot to verify a deployment."+McpBridge.Instructions});break;
                 case "ping":response=McpJson.Result(id,new{});break;
-                case "tools/list":response=McpJson.Result(id,new{tools=McpTools.List()});break;
+                case "tools/list":
+                    try { response=McpJson.Result(id,new{tools=McpTools.List(),_meta=new Dictionary<string,object>{{GeminiSettings.MetadataKey,GeminiSettings.Parse(options.GeminiReadOnlyHints,true)}}}); }
+                    catch { response=McpJson.Error(id,-32603,"Gemini readOnlyHint settings could not be read. Restore defaults in administrator settings."); }
+                    break;
                 case "resources/list":response=McpJson.Result(id,new{resources=new object[0]});break;
                 case "resources/templates/list":response=McpJson.Result(id,new{resourceTemplates=new object[0]});break;
                 case "prompts/list":response=McpJson.Result(id,new{prompts=new object[0]});break;
