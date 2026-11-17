@@ -89,10 +89,11 @@ namespace RemoteControl
             SetMany(new Dictionary<string, string> { { key, value ?? "" } });
         }
 
-        internal static string[] GetMany(string[] keys)
+        internal static string[] GetMany(string[] keys, bool reload = false)
         {
             lock (gate)
             {
+                if (reload) map = null;
                 Load();
                 string[] result = new string[keys.Length];
                 for (int i = 0; i < keys.Length; i++)
@@ -109,6 +110,15 @@ namespace RemoteControl
         // 조건 검사와 파일 변경을 같은 파일 잠금 안에서 한다. 직접 입력 모드로 바뀐 뒤
         // 늦게 끝난 Tailscale 작업이 URL/플러그인을 덮어쓰지 못하게 한다.
         internal static bool SetManyIf(string requiredKey, string requiredValue, Dictionary<string, string> changes, Action beforeSave)
+        { return UpdateCore(requiredKey, requiredValue, changes, beforeSave, null); }
+
+        // The callback sees the latest policy while holding the same cross-process lease.
+        // Returning null is a read/receipt lookup: it must not rewrite the file.
+        internal static void UpdateMany(Func<Dictionary<string, string>, Dictionary<string, string>> update)
+        { UpdateCore(null, null, null, null, update); }
+
+        private static bool UpdateCore(string requiredKey, string requiredValue, Dictionary<string, string> changes, Action beforeSave,
+            Func<Dictionary<string, string>, Dictionary<string, string>> update)
         {
             RemoteControlSecrets.ConfigProtection.RequireAdministrator();
             lock (gate)
@@ -131,6 +141,10 @@ namespace RemoteControl
                     if (requiredKey != null && (!map.TryGetValue(requiredKey, out actual) || actual != requiredValue)) return false;
                     try
                     {
+                        if (update != null) {
+                            changes = update(new Dictionary<string, string>(map, StringComparer.OrdinalIgnoreCase));
+                            if (changes == null) return true;
+                        }
                         foreach (KeyValuePair<string, string> pair in changes)
                         {
                             if (string.IsNullOrWhiteSpace(pair.Key) || pair.Key.IndexOfAny(new[] { '\r', '\n', '\0', '=' }) >= 0)

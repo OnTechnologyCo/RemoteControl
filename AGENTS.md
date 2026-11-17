@@ -1,3 +1,11 @@
+## Gemini 설정 MCP 조회·저장 (v1.9.16)
+
+- pc_get_gemini_settings / pc_set_gemini_settings는 직접 인증된 단일 RemoteControl 소유자와 expected_hostname을 검증한다. SET은 Windows 관리자 권한과 최신 mcp_enabled·자격 증명 정책을 Config 파일 잠금 안에서 다시 검사한다. 명령/화면 기능과 무관하며 브릿지에는 노출하지 않는다.
+- Config.UpdateMany는 기존 프로세스/파일 잠금과 원자적 교체 아래 최신 맵으로 변환한다. UI의 revision 충돌 검사, 부분 변경, 전체 복원과 요청 영수증은 같은 저장 경로를 사용한다. 영수증은 인증 연결+자격 증명에 결합한 해시 키이며 토큰 원문을 기록하지 않는다.
+- 같은 ID·같은 요청은 원래 결과만 반환하고 나중 변경을 재적용하지 않는다. GET의 request_id는 해당 연결의 과거 저장 결과 조회용이다. 새 의도에는 새 ID를 쓴다. 256개/연결, 4096개/서버, 8MiB 기록 한도에서 자동 삭제하지 않고 REQUEST_HISTORY_FULL로 거부한다. 기록 삭제로 오래된 요청을 다시 실행 가능하게 만드는 자동 정리를 추가하지 않는다.
+- pc_set_gemini_settings는 항상 readOnlyHint=false, UI 수정 불가다. C# 복원과 JS 변환에서 이전 저장 도구 키를 무시한다. 유효 카탈로그를 저장 전에 구성하고 다음 요청에서 확정된 설정만 읽으므로 별도 비동기 적용 성공을 가정하지 않는다.
+- bench/Test-GeminiSettings.ps1은 별도 프로세스 동시 변경·UI 충돌·영수증 보존·실패 원자성을, web-mcp/test/gemini-hints.test.mjs는 실제 HTTP OAuth 노출/호출/재시작/격리를 검사한다. 실제 Google 계정 권한과 운영 설치는 별도다. 상세: docs/gemini-settings-validation-1916.md.
+
 ## Gemini readOnlyHint 관리자 설정 (v1.9.15)
 
 - GeminiSettings는 기존 보호된 Config의 mcp_gemini_readonly_hints에 boolean 맵을 저장한다. 미설정과 false를 구분하고 16KiB·실제 도구 이름·JSON boolean을 검증한다. 저장 성공 전 실행 맵을 바꾸지 않는다. 삭제된 도구 키는 복원 시 무시하고 다음 저장에서 정리한다.

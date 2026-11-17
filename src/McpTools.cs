@@ -55,6 +55,8 @@ namespace RemoteControl
                 Tool("prepare_download", "Prepare a binary file or folder ZIP for streamed or chunked download. Folder preparation is asynchronous; poll transfer status.",false,new[]{"path","kind"},"path",Str("Remote file or folder"),"kind",Str("file or folder")),
                 Tool("read_download_chunk", "Read up to 256KiB of a prepared file or folder ZIP. Verify chunk and complete SHA-256 when saving the bytes.",true,new[]{"transfer_id"},"transfer_id",Str("Prepared download ID"),"offset",Num("Byte offset"),"limit",Num("1..262144, default 262144"))
             };
+            // Administrative settings require the direct target owner's MCP session.
+            if(includeBridge) result.AddRange(GeminiSettings.Definitions());
             if(includeBridge)result.AddRange(new[] {
                 Tool("list_bridge_pcs", "List registered child PCs and their target_revision. Does not connect or change the active local target.",true,none),
                 Tool("bridge_list_tools", "Read the selected child PC's MCP tools. Both PCs must support bridge MCP. Use the exact ID and revision from pc_list_bridge_pcs.",true,new[]{"bridge_id","target_revision"},"bridge_id",Num("Registered child PC ID"),"target_revision",Str("Exact revision from pc_list_bridge_pcs")),
@@ -64,6 +66,7 @@ namespace RemoteControl
         }
         internal object Call(string name, Dictionary<string, object> a, McpOptions options, string user, string token = null)
         {
+            if(name=="pc_get_gemini_settings"||name==GeminiSettings.Setter)return McpJson.Text(GeminiSettings.Call(name,a,options,user,token));
             if(name=="pc_list_bridge_pcs")return McpBridge.List();
             if(name=="pc_bridge_list_tools"||name=="pc_bridge_call")return bridge.Call(name,a,options,user,token);
             if(name=="pc_begin_upload"||name=="pc_write_upload_chunk"||name=="pc_finish_upload"||name=="pc_get_transfer_status"||name=="pc_cancel_transfer"||name=="pc_prepare_download"||name=="pc_read_download_chunk")return McpJson.Text(Transfers.Call(name,a,options,token));

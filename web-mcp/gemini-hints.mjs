@@ -6,6 +6,7 @@ export function applyGeminiHints(tools, overrides) {
   if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides) || Buffer.byteLength(JSON.stringify(overrides)) > 16384)
     throw Error('Invalid Gemini readOnlyHint snapshot');
   for (const [name, value] of Object.entries(overrides)) {
+    if (name === 'pc_set_gemini_settings') continue; // Migrate legacy overrides; this mutation is always readOnlyHint=false.
     if (typeof value !== 'boolean') throw Error('Invalid Gemini readOnlyHint value');
     const tool = result.find(tool => tool.name === name);
     if (!tool) continue; // A retired tool must not prevent schema refresh after upgrade.

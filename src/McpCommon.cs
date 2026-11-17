@@ -25,7 +25,7 @@ namespace RemoteControl
         internal static object Text(object result) { return new { content = new[] { new { type = "text", text = Write(result) } } }; }
         internal static object ToolError(Exception error)
         {
-            string code = error is McpBridgeException ? ((McpBridgeException)error).Code : error is McpCapabilityDisabledException ? "CAPABILITY_DISABLED" : error is UnauthorizedAccessException ? "ACCESS_DENIED" :
+            string code = error is GeminiSettingsException ? ((GeminiSettingsException)error).Code : error is McpBridgeException ? ((McpBridgeException)error).Code : error is McpCapabilityDisabledException ? "CAPABILITY_DISABLED" : error is UnauthorizedAccessException ? "ACCESS_DENIED" :
                 error is FileNotFoundException || error is DirectoryNotFoundException ? "NOT_FOUND" :
                 error is ArgumentException ? "INVALID_ARGUMENT" : error is IOException ? "IO_ERROR" : "OPERATION_FAILED";
             return new { isError = true, content = new[] { new { type = "text", text = error.Message } }, structuredContent = new { error_code = code } };
@@ -44,11 +44,14 @@ namespace RemoteControl
         internal string[] Workspaces = new string[0];
         internal string CredentialStamp = "";
         internal string GeminiReadOnlyHints = "";
+        internal string SettingsOwner = "";
         // 배포한 사용자 프로그램은 RemoteControl 제거 시 지우는 설정 폴더 밖에 둔다.
         internal static string DefaultWorkspace { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonDocuments), "RemoteControlDeploy"); } }
         internal static McpOptions Load()
         {
+            Config.Reload();
             var o = new McpOptions(); o.Enabled = Config.Get("mcp_enabled") == "1";
+            o.SettingsOwner = Config.User;
             o.GeminiReadOnlyHints = Config.Get(GeminiSettings.Key);
             o.CredentialStamp = Config.User + "|" + Config.Get("pwhash");
             int port; if (int.TryParse(Config.Get("mcp_port"), out port)) o.Port = port;

@@ -1,4 +1,12 @@
-# 원격제어 v1.9.15
+# 원격제어 v1.9.16
+
+## v1.9.16 Gemini 설정 조회·저장 MCP 도구
+
+Gemini 대화에서 `pc_get_gemini_settings`로 현재 설정을 조회하고 `pc_set_gemini_settings`로 선택 도구를 변경·복원하거나 전체 기본값으로 복원할 수 있습니다. 먼저 `pc_get_status`의 hostname을 확인하여 `expected_hostname`에 넣으세요. 저장에는 새 `request_id`가 필요하며 응답 유실 시 같은 ID로 결과를 조회합니다.
+
+Web MCP → Gemini 커넥터 설정에서도 같은 저장소를 사용합니다. 현재 29개 도구의 기본값·저장값·유효값을 표시하며 저장 도구 자신은 false 고정입니다. 동시 변경을 보존하고 오래 열린 화면의 저장은 충돌을 알립니다. 서버 메타데이터 변경과 Gemini의 항상 허용 권한은 별개입니다.
+
+설치 파일: `dist/RemoteControl_Setup_v1.9.16.exe`. [사용 안내](docs/gemini-readonly-hints.md) · [검증 기록](docs/gemini-settings-validation-1916.md).
 
 ## v1.9.15 Gemini 도구별 readOnlyHint 설정
 
