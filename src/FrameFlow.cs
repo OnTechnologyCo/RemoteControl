@@ -101,6 +101,46 @@ namespace RemoteControl
         }
     }
 
+    internal sealed class JpegQualityPolicy
+    {
+        private const int WindowMs = 30000;
+        private int windowAt, sampledAt, samples, lower, higher, streak;
+
+        internal JpegQualityPolicy() { Reset(Environment.TickCount); }
+        internal void Reset(int now)
+        {
+            windowAt = sampledAt = now;
+            samples = lower = higher = streak = 0;
+        }
+        internal bool SampleDue(int now) { return unchecked((uint)(now - sampledAt)) >= 1000; }
+
+        internal int Observe(int now, int quality, int pending, bool moving, double queueMs)
+        {
+            if (!SampleDue(now)) return quality;
+            sampledAt = now;
+            samples++;
+            if (quality > 40 && moving && pending > 8 && queueMs > (quality > 55 ? 130 : 250)) lower++;
+            if (quality < 70 && (moving ? queueMs < (quality < 55 ? 200 : 100) : pending <= 8)) higher++;
+
+            uint elapsed = unchecked((uint)(now - windowAt));
+            if (elapsed < WindowMs) return quality;
+            // 관측이 끊긴 구간은 세지 않는다. 짧은 혼잡이 다음 구간의 화질까지 바꾸지 않게 한다.
+            int direction = 0;
+            if (elapsed < 2 * WindowMs && samples >= 20)
+            {
+                if (lower * 5 >= samples * 4) direction = -1;
+                else if (higher * 5 >= samples * 4) direction = 1;
+            }
+            windowAt = now;
+            samples = lower = higher = 0;
+            if (direction != Math.Sign(streak)) streak = 0;
+            streak += direction;
+            if (streak == -2) { streak = 0; return quality > 55 ? 55 : 40; }
+            if (streak == 4) { streak = 0; return quality < 55 ? 55 : 70; }
+            return quality;
+        }
+    }
+
     internal static class TilePolicy
     {
         internal static int Choose(int maximum, int width, int height, int budget)
@@ -182,6 +222,7 @@ namespace RemoteControl
         internal int VideoAttemptAt = Environment.TickCount - 10000;
         internal readonly LatestTiles Tiles = new LatestTiles();
         internal readonly FrameFlow Flow = new FrameFlow();
+        internal readonly JpegQualityPolicy JpegQuality = new JpegQualityPolicy();
         internal void Post(Action action)
         {
             lock (gate)

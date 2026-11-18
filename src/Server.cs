@@ -907,6 +907,7 @@ namespace RemoteControl
                             int maxTile = Json.Int(o, "tile", 128) == 1024 ? 1024 : 128;
                             bool probe = Json.Bool(o, "probe", false);
                             output.Post(delegate {
+                                if (automatic != output.AutoQuality) output.JpegQuality.Reset(Environment.TickCount);
                                 output.AutoQuality = automatic; output.MaxTileSize = maxTile;
                                 if (probe) ws.SendText("{\"t\":\"probe\",\"n\":" + output.Flow.Probe() + "}");
                                 output.Flow.Enable(); // 설정/RTT 요청보다 화면 전송이 먼저 시작되는 경합을 막는다.
@@ -917,7 +918,7 @@ namespace RemoteControl
                             break;
                         case "viewpause":
                             bool pause = Json.Bool(o, "v", false);
-                            output.Post(delegate { output.Paused = pause; if (pause) StopVideo(ws, src, output); else { src.InvalidateAll(); output.VideoAttemptAt = Environment.TickCount - 10000; } });
+                            output.Post(delegate { output.JpegQuality.Reset(Environment.TickCount); output.Paused = pause; if (pause) StopVideo(ws, src, output); else { src.InvalidateAll(); output.VideoAttemptAt = Environment.TickCount - 10000; } });
                             break;
                         // 브라우저가 보내는 좌표는 "받은 그림" 기준이다.
                         // 축소해서 보내는 중이면 그만큼 되돌려야 실제 화면 좌표가 된다.
@@ -1020,7 +1021,11 @@ namespace RemoteControl
 
                         case "quality":
                             int quality = Json.Int(o, "q", 70);
-                            output.Post(delegate { output.AutoQuality = quality == 0; src.Quality = quality == 0 ? 70 : quality; });
+                            output.Post(delegate {
+                                output.JpegQuality.Reset(Environment.TickCount);
+                                output.AutoQuality = quality == 0;
+                                src.Quality = quality == 0 ? 70 : quality;
+                            });
                             break;
 
                         case "nextScreen":
@@ -1143,6 +1148,7 @@ namespace RemoteControl
             IRealtimeVideo video = output.Video;
             if (video == null) return;
             output.Video = null; video.Dispose(); output.Tiles.Clear(); src.InvalidateAll();
+            output.JpegQuality.Reset(Environment.TickCount);
             SendRtc(ws, video.Id, "stop", "JPEG");
         }
 
@@ -1157,7 +1163,6 @@ namespace RemoteControl
             // 캡처는 16ms 간격이지만 전송은 ACK 즉시 재개한다. 둘을 같이 재우면
             // 빠른 LAN에서도 4K 화면의 다음 두 묶음을 보낼 때마다 16ms가 낭비된다.
             var schedule = new FrameSchedule();
-            int qualityChangedAt = Environment.TickCount;
             int lastMotionAt = Environment.TickCount;
             int tileChangedAt = Environment.TickCount - 3000;
             int cursorAt = Environment.TickCount - 33;
@@ -1187,6 +1192,14 @@ namespace RemoteControl
                     if (output.Video.Expired) StopVideo(ws, src, output);
                 }
                 bool videoActive = output.Video != null && output.Video.Active;
+                int now = Environment.TickCount;
+                if (!videoActive && output.AutoQuality && output.JpegQuality.SampleDue(now) && output.Flow.Enabled)
+                {
+                    int current = (int)src.Quality;
+                    int quality = output.JpegQuality.Observe(now, current, output.Tiles.Count,
+                        unchecked((uint)(now - lastMotionAt)) < 1200, output.Flow.QueueLatency);
+                    if (quality != current) { src.Quality = quality; output.Tiles.Clear(); }
+                }
 
 
                 // 준비 중인 화면을 16ms마다 다시 압축하면 4K에서는 남은 타일이 굶는다.
@@ -1209,15 +1222,6 @@ namespace RemoteControl
                         output.Mapping = new InputViewport(src.Area, src.FrameWidth, src.FrameHeight, output.View);
                         ws.SendText("{\"t\":\"tiles\",\"tile\":" + tileSize + ",\"cols\":" + src.Cols + ",\"rows\":" + src.Rows + ",\"view\":" + output.View + "}");
                         tileChangedAt = Environment.TickCount;
-                    }
-                    // 회선/디코딩이 밀리고 바뀔 조각이 많이 남아 있을 때만 화질을 줄인다.
-                    // 움직임이 멎으면 다시 선명하게 보내 문서 글자가 낮은 화질로 남지 않게 한다.
-                    if (output.Flow.Enabled && output.AutoQuality && Environment.TickCount - qualityChangedAt > 1500)
-                    {
-                        int q = output.Tiles.Count > 8 && Environment.TickCount - lastMotionAt < 1200
-                            ? (output.Flow.QueueLatency > 250 ? 40 : output.Flow.QueueLatency > 130 ? 55 : 70)
-                            : (Environment.TickCount - lastMotionAt > 1200 ? 70 : (int)src.Quality);
-                        if (src.Quality != q) { src.Quality = q; output.Tiles.Clear(); qualityChangedAt = Environment.TickCount; }
                     }
                     List<TilePatch> patches;
                     try { patches = src.Grab(); }

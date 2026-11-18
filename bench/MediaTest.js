@@ -67,13 +67,27 @@ async function run() {
     const fns = [...timers.values()]; fns[fns.length-1]();
     for (let i = 0; i < 6; i++) await Promise.resolve();
   }
-  await second(0); await second(.3); await second(.3); await second(.3);
-  assert(health().every(r=>r===12000000), 'restart grace ignores early jitter: ' + health());
-  await second(.3); await second(.3);
-  assert.equal(health().pop(), 7800000, 'sustained jitter after grace lowers the rate once');
-  await second(.3); await second(.3);
-  assert.equal(health().pop(), 7800000, 'new grace prevents a cascade of encoder restarts');
+  for (let s = 0; s < 60; s++) await second(s % 10 < 5 ? .3 : 0);
+  assert(health().every(r=>r===12000000), 'mixed windows including brief jitter keep the LAN start rate');
+  for (let s = 1; s <= 60; s++) {
+    await second(.3);
+    assert.equal(health().pop(), s < 60 ? 12000000 : 7800000, 'downgrade after two congested windows at ' + s);
+  }
+  for (let s = 1; s <= 120; s++) {
+    await second(s < 5 ? .3 : 0);
+    assert.equal(health().pop(), s < 120 ? 7800000 : 10530000, 'recovery after four good windows at ' + s);
+  }
+  for (let s = 0; s < 30; s++) await second(.3);
+  rtc.quality(40); await second(.3);
+  assert.equal(health().pop(), 4200000, 'manual setting takes effect on the next heartbeat');
+  for (let s = 0; s < 70; s++) await second(.3);
+  assert.equal(health().pop(), 4200000, 'manual rate stays fixed');
+  rtc.quality(0);
+  for (let s = 0; s < 59; s++) await second(.3);
+  assert.equal(health().pop(), 4200000, 'return to auto discards previous congestion history');
+  await second(.3);
+  assert.equal(health().pop(), 2730000, 'fresh sustained congestion after returning to auto');
   rtc.stop(false);
-  console.log('PASS LAN start bitrate and post-change grace period');
+  console.log('PASS LAN start bitrate, 30-second auto-quality windows and manual override');
 }
 run().catch(e=>{console.error(e);process.exitCode=1});

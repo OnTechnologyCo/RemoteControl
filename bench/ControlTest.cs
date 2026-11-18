@@ -16,6 +16,34 @@ namespace RemoteControl
         private static void Check(bool value, string message)
         { if (!value) throw new Exception(message); checks++; Console.WriteLine("PASS " + message); }
         private static int Flags(uint flag) { return Events.FindAll(delegate(Native.INPUT e) { return e.type == Native.INPUT_MOUSE && e.U.mi.dwFlags == flag; }).Count; }
+        private static void AutoQualityTiming()
+        {
+            var policy = new JpegQualityPolicy();
+            int start = int.MaxValue - 15000, current = 70;
+            policy.Reset(start);
+            for (int s = 1; s <= 240; s++)
+            {
+                current = policy.Observe(unchecked(start + s * 1000), current, 20, true, s <= 120 ? 350 : 40);
+                int expected = s < 60 ? 70 : s < 120 ? 55 : s < 240 ? 40 : 55;
+                if (current != expected) throw new Exception("Unexpected JPEG quality at second " + s);
+            }
+            Check(current == 55, "sustained congestion lowers JPEG one step per minute and recovery takes two minutes, across tick wrap");
+            policy.Reset(0);
+            current = 70;
+            for (int s = 1; s <= 120; s++)
+                current = policy.Observe(s * 1000, current, 20, true, s % 10 < 5 ? 400 : 20);
+            Check(current == 70, "alternating congestion inside a 30-second window holds JPEG quality");
+            policy.Reset(0);
+            for (int s = 1; s <= 30; s++) current = policy.Observe(s * 1000, current, 20, true, 350);
+            current = policy.Observe(150000, current, 20, true, 350);
+            for (int s = 151; s <= 180; s++) current = policy.Observe(s * 1000, current, 20, true, 350);
+            Check(current == 70, "unobserved time cannot supply a second congested window");
+            policy.Reset(0);
+            current = 40;
+            for (int s = 1; s <= 120; s++) current = policy.Observe(s * 1000, current, 0, false, 350);
+            Check(current == 55, "idle document recovers after four stable windows even if the last ACK was slow");
+        }
+
         public static int Main()
         {
             try
@@ -49,6 +77,7 @@ namespace RemoteControl
                 flow.Ack(9999); Check(!flow.CanSend, "unknown ACK cannot bypass the window");
                 flow.Ack(n2); Check(flow.CanSend, "out-of-order valid ACK reopens the window");
                 flow.Begin(); flow.Ack(n2); Check(!flow.CanSend, "duplicate ACK cannot bypass the window"); flow.Ack(n1);
+                AutoQualityTiming();
                 var adaptive = new FrameFlow(); adaptive.Enable();
                 for (int i = 0; i < 8; i++) { int n = adaptive.Begin(adaptive.Budget); adaptive.Ack(n); }
                 Check(adaptive.Budget == FrameFlow.MaxPacketBytes, "fast full batches grow to a bounded LAN budget");

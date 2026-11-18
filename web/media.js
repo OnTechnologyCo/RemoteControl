@@ -57,7 +57,34 @@ function RemoteVideo(options) {
   var self = this, peer = null, serial = 0, id = 0, generation = 0;
   var video = null, timer = null, ready = false, remote = [], local = [], offered = false;
   var lastFrame = 0, started = 0, previous = null, statsPending = false;
-  var maxRate = 6000000, rate = 2000000, good = 0, automatic = true, encoder = 'H.264', rateChangedAt = 0;
+  var maxRate = 6000000, rate = 2000000, automatic = true, encoder = 'H.264';
+  var rateChangedAt, windowAt, sampledAt, good, bad, streak;
+  function resetRateHistory(now) {
+    rateChangedAt = windowAt = sampledAt = now;
+    good = bad = streak = 0;
+  }
+  function observeRate(now, congested) {
+    // Ignore the encoder restart, then judge whole windows of decoded video.
+    if (now - rateChangedAt < 5000 || now - sampledAt < 500) return;
+    sampledAt = now;
+    if (congested) bad++; else good++;
+    var elapsed = now - windowAt;
+    if (elapsed < 30000) return;
+    var samples = good + bad, direction = 0;
+    if (elapsed < 60000 && samples >= 20) {
+      if (bad * 5 >= samples * 4) direction = -1;
+      else if (good * 5 >= samples * 4) direction = 1;
+    }
+    windowAt = now;
+    good = bad = 0;
+    if (direction * streak <= 0) streak = 0;
+    streak += direction;
+    if (streak === -2 || streak === 4) {
+      var next = streak < 0 ? Math.max(500000, Math.floor(rate * .65)) : Math.min(maxRate, Math.floor(rate * 1.35));
+      streak = 0;
+      if (next !== rate) { rate = next; resetRateHistory(now); }
+    }
+  }
   var currentInfo = null;
   function signal(op, data) { options.send({ t: 'rtc', op: op, id: id, view: options.view(), data: data || '' }); }
   function close(notify) {
@@ -80,7 +107,7 @@ function RemoteVideo(options) {
     close(true); currentInfo = info;
     if (!info || info.rtc !== 1 || typeof RTCPeerConnection === 'undefined' || document.hidden) return;
     var gen = generation;
-    id = ++serial; started = lastFrame = rateChangedAt = performance.now(); good = 0;
+    id = ++serial; started = lastFrame = performance.now(); resetRateHistory(started);
     // src/RtcSession.cs Bitrates 와 같은 표. 같은 LAN 이면 helper 가 'bitrate' 로 상한부터 시작한다고 알려 준다.
     var pixels = info.w * info.h;
     maxRate = pixels >= 3840 * 2160 ? 16000000 : pixels >= 2560 * 1440 ? 12000000 : 8000000;
@@ -153,15 +180,7 @@ function RemoteVideo(options) {
               var delay = emitted > 0 ? (r.jitterBufferDelay - previous.jitterBufferDelay) / emitted : 0;
               if (frames > 0 && !video.requestVideoFrameCallback) lastFrame = now;
               options.stats(Math.max(0, r.bytesReceived - previous.bytesReceived), frames);
-              // 전송률을 바꾸면 helper 가 인코더를 다시 띄워 화면이 잠깐(최대 0.7초) 멎는다. 그 직후의
-              // 지연·손실은 회선 상태가 아니라 재시작의 흔적이라, 그걸 보고 또 깎으면 또 재시작하는
-              // 악순환으로 500kbps 까지 떨어졌다(video-helper latency bench). 바꾼 뒤 잠시는 판단을 쉰다.
-              if (automatic && now - rateChangedAt >= 5000 && frames > 0) {
-                var before = rate;
-                if (loss > .03 || delay > .12) { rate = Math.max(500000, Math.floor(rate * .65)); good = 0; }
-                else if (++good >= 8) { rate = Math.min(maxRate, Math.floor(rate * 1.35)); good = 0; }
-                if (rate !== before) rateChangedAt = now;
-              }
+              if (automatic && frames > 0) observeRate(now, loss > .03 || delay > .12);
             }
             previous = r;
           });
@@ -178,7 +197,7 @@ function RemoteVideo(options) {
     if (m.op === 'bitrate') {
       // helper 가 실제로 시작한 전송률. 여기서 다른 값을 'ready' 로 보내면 helper 가 2초 뒤 인코더를 다시 띄운다.
       var start = parseInt(m.data, 10);
-      if (start > 0 && automatic) { rate = Math.min(maxRate, start); good = 0; rateChangedAt = performance.now(); }
+      if (start > 0 && automatic) { rate = Math.min(maxRate, start); resetRateHistory(performance.now()); }
       return;
     }
     if (m.op === 'answer') {
@@ -195,7 +214,11 @@ function RemoteVideo(options) {
       } catch (e) { close(true); }
     }
   };
-  this.quality = function (q) { automatic = q === 0; if (!automatic) rate = Math.round(maxRate * (q < 55 ? .35 : q < 80 ? .7 : 1)); };
+  this.quality = function (q) {
+    if (automatic !== (q === 0)) resetRateHistory(performance.now());
+    automatic = q === 0;
+    if (!automatic) rate = Math.round(maxRate * (q < 55 ? .35 : q < 80 ? .7 : 1));
+  };
   this.resume = function () { if (currentInfo) self.start(currentInfo); };
   this.active = function () { return ready; };
 }
