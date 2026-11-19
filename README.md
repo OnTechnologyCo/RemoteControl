@@ -1,4 +1,10 @@
-# 원격제어 v1.9.16
+# 원격제어 v1.9.17
+
+## v1.9.17 화면 전송 자동 화질 안정화
+
+JPEG 화면과 GPU 영상은 전송 상태를 30초 단위로 판단합니다. 한 구간 관측값의 80% 이상이 같은 경향일 때, 혼잡한 구간이 두 번 이어지면 화질을 한 단계 낮추고 안정된 구간이 네 번 이어지면 한 단계 높입니다. 수동 화질은 선택 즉시 반영됩니다.
+
+[Windows 설치 파일 다운로드](https://github.com/OnTechnologyCo/RemoteControl/releases/download/v1.9.17/RemoteControl_Setup_v1.9.17.exe)
 
 ## v1.9.16 Gemini 설정 조회·저장 MCP 도구
 
